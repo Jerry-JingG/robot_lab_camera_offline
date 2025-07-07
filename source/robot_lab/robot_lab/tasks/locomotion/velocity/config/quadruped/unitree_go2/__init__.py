@@ -28,3 +28,14 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:UnitreeGo2RoughPPORunnerCfg",
     },
 )
+
+#注册训练任务
+gym.register(
+    id="RobotLab-Isaac-Velocity-Blind-Unitree-Go2-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.blind_env_cfg:UnitreeGo2BlindEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:UnitreeGo2BlindPPORunnerCfg",
+    },
+)
