@@ -118,7 +118,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-    
+        # 获取 InteractiveScene
+        
+    scene = env.unwrapped.scene
+
+    # 正确遍历 art 实例
+    for name, art in scene.articulations.items():
+        # art 是 Articulation 对象，可以访问 body_names
+        body_names = art.body_names
+        print(f"\n=== articulation '{name}' body_names（共 {len(body_names)} 项） ===", file=sys.stderr)
+        for bn in body_names:
+            print(" -", bn, file=sys.stderr)
+        print("=== end ===\n", file=sys.stderr)
+        
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
