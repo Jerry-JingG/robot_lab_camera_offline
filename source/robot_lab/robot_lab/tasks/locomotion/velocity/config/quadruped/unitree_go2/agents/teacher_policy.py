@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .collision_domain_encoder import CollisionDomainEncoder
 
+#导入Actor-Critic模块
+from rsl_rl.modules.actor_critic import ActorCritic
+
 class TeacherPolicy(nn.Module):
     """
     教师策略网络:
@@ -20,6 +23,16 @@ class TeacherPolicy(nn.Module):
     def __init__(self, proprio_obs_dim: int, action_dim: int,
                  grid_size: tuple = (20, 20), latent_dim: int = 64,
                  actor_hidden_dims=[256, 128], critic_hidden_dims=[256, 128]):
+
+        # 初始化Actor-Critic模块
+        self.ac = ActorCritic(
+            num_actor_obs=proprio_obs_dim + latent_dim,
+            num_critic_obs=proprio_obs_dim + latent_dim,
+            num_actions=action_dim,
+            actor_hidden_dims=actor_hidden_dims,
+            critic_hidden_dims=critic_hidden_dims,
+            activation='relu'  # 或其他
+        )
         """
         初始化教师策略网络。
         参数:
@@ -75,10 +88,11 @@ class TeacherPolicy(nn.Module):
         latent = self.collision_domain_encoder(collision_grid)  # (B, latent_dim)
         # 拼接本体观测与latent特征
         policy_input = torch.cat([obs, latent], dim=-1)  # (B, proprio_obs_dim+latent_dim)
+        self.ac.update_distribution(policy_input)
         # Actor产生动作输出均值
-        action_mean = self.actor_net(policy_input)  # (B, action_dim)
+        action_mean = self.ac.actor_net(policy_input)  # (B, action_dim)
         # Critic产生状态值估计
-        value = self.critic_net(policy_input)       # (B, 1)
+        value = self.ac.critic_net(policy_input)       # (B, 1)
         return action_mean, value
 
 # 用法:
