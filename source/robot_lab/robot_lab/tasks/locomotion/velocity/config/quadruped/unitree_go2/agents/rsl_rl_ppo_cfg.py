@@ -2,16 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from isaaclab.utils import configclass
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from isaaclab_rl.rsl_rl import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoActorCriticCfg,
+    RslRlPpoAlgorithmCfg,
+)
 
-#TODO:在这里写一个Blind任务要用的网络
-@configclass
+
 class UnitreeGo2BlindPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 20000
     save_interval = 100
-    experiment_name = "unitree_go2_rough"
+    experiment_name = "unitree_go2_blind"
     empirical_normalization = False
+    use_teacher_policy = True  # Set to True to use TeacherPolicyRunner
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
@@ -41,6 +45,7 @@ class UnitreeGo2RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 100
     experiment_name = "unitree_go2_rough"
     empirical_normalization = False
+    use_teacher_policy = False  # Set to True to use TeacherPolicyRunner
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],

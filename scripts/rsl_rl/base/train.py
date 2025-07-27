@@ -73,6 +73,19 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 
 import robot_lab.tasks  # noqa: F401
 
+# Import TeacherPolicyRunner for teacher policy training
+try:
+    from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.runners import (
+        TeacherPolicyRunner,
+    )
+    TEACHER_POLICY_AVAILABLE = True
+except ImportError:
+    TEACHER_POLICY_AVAILABLE = False
+    print(
+        "[WARNING] TeacherPolicyRunner not available. "
+        "Using default OnPolicyRunner."
+    )
+
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.deterministic = False
@@ -117,7 +130,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     log_dir = os.path.join(log_root_path, log_dir)
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task,
+        cfg=env_cfg,
+        render_mode="rgb_array" if args_cli.video else None
+    )
 
     # 
     # 获取 InteractiveScene    
@@ -155,7 +172,33 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     # create runner from rsl-rl
-    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    # Check if we should use TeacherPolicyRunner based on task name
+    use_teacher_policy = (
+        TEACHER_POLICY_AVAILABLE
+        and "unitree_go2" in args_cli.task
+        and hasattr(agent_cfg, "use_teacher_policy")
+        and agent_cfg.use_teacher_policy
+    )
+
+    if use_teacher_policy:
+        print(
+            "[INFO] Using TeacherPolicyRunner for teacher policy "
+            "training."
+        )
+        runner = TeacherPolicyRunner(
+            env,
+            agent_cfg.to_dict(),
+            log_dir=log_dir,
+            device=agent_cfg.device
+        )
+    else:
+        print("[INFO] Using default OnPolicyRunner.")
+        runner = OnPolicyRunner(
+            env,
+            agent_cfg.to_dict(),
+            log_dir=log_dir,
+            device=agent_cfg.device
+        )
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # load the checkpoint
