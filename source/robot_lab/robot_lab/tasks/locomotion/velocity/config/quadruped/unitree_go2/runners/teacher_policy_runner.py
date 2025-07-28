@@ -10,6 +10,10 @@ import torch.nn as nn
 from rsl_rl.runners import OnPolicyRunner
 from rsl_rl.env import VecEnv
 
+from dataclasses import asdict
+from rsl_rl.algorithms import PPO
+from ..agents.teacher_policy import TeacherPolicy
+
 # 导入Teacher Policy相关模块
 # from ..agents.teacher_policy import (
 #     TeacherPolicy, 
@@ -51,15 +55,52 @@ class TeacherPolicyRunner(OnPolicyRunner):
             history_steps: 历史观测步数
             collision_loss_weight: 碰撞估计损失权重
         """
-        # TODO: 调用父类初始化，但需要修改策略类为TeacherPolicy
-        # 暂时先调用父类初始化
-        super().__init__(env, train_cfg, log_dir, device)
+        # 不再直接调用 super().__init__，因为我们要自定义策略的创建
+        self.cfg = train_cfg
+        self.alg_cfg = train_cfg["algorithm"]
+        self.policy_cfg = train_cfg["policy"]
+        self.device = device
+        self.env = env
         
-        self.history_steps = history_steps
-        self.collision_loss_weight = collision_loss_weight
-        print("===========check============")
-        print("确实调用了teacher policy")
-        print("============================")
+        print("=================================================")
+        print("TeacherPolicyRunner.__init__ IS CALLED!")
+        print("=================================================")
+
+        proprio_obs_dim = self.env.num_obs
+        action_dim = self.env.num_actions
+        
+        # 从字典中获取 actor/critic 隐藏层维度
+        actor_hidden_dims = self.policy_cfg['actor_hidden_dims']
+        critic_hidden_dims = self.policy_cfg['critic_hidden_dims']
+        
+        teacher_policy = TeacherPolicy(
+            proprio_obs_dim=proprio_obs_dim,
+            action_dim=action_dim,
+            history_steps=history_steps,
+            num_links=4,
+            actor_hidden_dims=actor_hidden_dims,
+            critic_hidden_dims=critic_hidden_dims,
+        ).to(self.device)
+
+        self.alg = PPO(
+            actor_critic=teacher_policy,
+            device=self.device,
+            **self.alg_cfg  # self.alg_cfg 现在本身就是字典，可以直接解包
+        )
+        
+        if hasattr(teacher_policy, 'num_critic_obs'):
+             num_critic_obs = teacher_policy.num_critic_obs
+        else:
+             print("[WARNING] TeacherPolicy does not have 'num_critic_obs' attribute. Using num_obs as fallback.")
+             num_critic_obs = proprio_obs_dim
+
+        # 使用字典键访问
+        self.alg.init_storage(self.env.num_envs, self.cfg["num_steps_per_env"], [proprio_obs_dim], [num_critic_obs], [action_dim])
+
+        self.num_steps_per_env = self.cfg["num_steps_per_env"]
+        self.save_interval = self.cfg["save_interval"]
+        self.current_learning_iteration = 0
+        self.writer = None
         
         # TODO: 替换默认的actor_critic为TeacherPolicy
         # self._init_teacher_policy()

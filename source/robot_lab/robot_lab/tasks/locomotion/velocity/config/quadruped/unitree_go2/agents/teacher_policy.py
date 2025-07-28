@@ -141,6 +141,10 @@ class TeacherPolicy(nn.Module):
         """
         super(TeacherPolicy, self).__init__()
         
+        print("-------------------------------------------------")
+        print(f"TeacherPolicy.__init__ IS CALLED! I am the policy!")
+        print("-------------------------------------------------")
+        
         self.proprio_obs_dim = proprio_obs_dim
         self.action_dim = action_dim
         self.history_steps = history_steps
