@@ -9,6 +9,7 @@ from isaaclab_rl.rsl_rl import (
 )
 
 
+@configclass
 class UnitreeGo2BlindPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 20000

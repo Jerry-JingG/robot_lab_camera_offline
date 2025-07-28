@@ -75,7 +75,7 @@ import robot_lab.tasks  # noqa: F401
 
 # Import TeacherPolicyRunner for teacher policy training
 try:
-    from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.runners import (
+    from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.runners.teacher_policy_runner import (
         TeacherPolicyRunner,
     )
     TEACHER_POLICY_AVAILABLE = True
@@ -175,7 +175,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # Check if we should use TeacherPolicyRunner based on task name
     use_teacher_policy = (
         TEACHER_POLICY_AVAILABLE
-        and "unitree_go2" in args_cli.task
+        and "Unitree-Go2-v0" in args_cli.task
         and hasattr(agent_cfg, "use_teacher_policy")
         and agent_cfg.use_teacher_policy
     )
@@ -213,12 +213,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_pickle(os.path.join(log_dir, "params", "env.pkl"), env_cfg)
     dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
-    runner.print_config()
     print(f"[INFO] Starting training with {agent_cfg.algorithm.class_name} algorithm.")
     # run training
     runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
-    
-
     # close the simulator
     env.close()
 
