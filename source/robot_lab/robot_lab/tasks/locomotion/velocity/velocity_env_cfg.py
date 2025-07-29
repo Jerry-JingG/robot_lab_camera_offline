@@ -34,7 +34,8 @@ import robot_lab.tasks.locomotion.velocity.mdp as mdp
 # Pre-defined configs
 ##
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
-
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils_cfg
+    
 
 ##
 # Scene definition
@@ -68,13 +69,14 @@ class MySceneCfg(InteractiveSceneCfg):
     # robots
     robot: ArticulationCfg = MISSING
     # sensors
-    collision_scanner = RayCasterCfg(
+    collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
+        offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
         attach_yaw_only=True,
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
-        debug_vis=False,
+        pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
+        debug_vis=True,
         mesh_prim_paths=["/World/ground"],
+        max_distance=10.0,
     )
     height_scanner = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
@@ -689,7 +691,7 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=1, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
