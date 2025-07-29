@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 
 import torch
 import torch.nn as nn
+import rsl_rl
 
 from rsl_rl.runners import OnPolicyRunner
 from rsl_rl.env import VecEnv
@@ -13,14 +14,6 @@ from rsl_rl.env import VecEnv
 from dataclasses import asdict
 from rsl_rl.algorithms import PPO
 from ..agents.teacher_policy import TeacherPolicy
-
-# 导入Teacher Policy相关模块
-# from ..agents.teacher_policy import (
-#     TeacherPolicy, 
-#     CollisionEstimationModel, 
-#     CollisionDomainEncoder
-# )
-
 
 class TeacherPolicyRunner(OnPolicyRunner):
     """
@@ -42,8 +35,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
                  train_cfg: Dict[str, Any],
                  log_dir: Optional[str] = None,
                  device: str = 'cpu',
-                 history_steps: int = 10,
-                 collision_loss_weight: float = 1.0):
+                 **kwargs):
         """
         初始化Teacher Policy训练器
         
@@ -55,65 +47,108 @@ class TeacherPolicyRunner(OnPolicyRunner):
             history_steps: 历史观测步数
             collision_loss_weight: 碰撞估计损失权重
         """
-        # 不再直接调用 super().__init__，因为我们要自定义策略的创建
+        print("=================================================")
+        print("TeacherPolicyRunner.__init__ IS CALLED!")
+        print("=================================================")
+
+        # 1. 手动调用父类的部分初始化代码，或者直接设置必要的属性
+        # 我们不能直接调用 super().__init__，因为它会创建策略
+        # 所以我们把 OnPolicyRunner.__init__ 的代码复制过来并修改
         self.cfg = train_cfg
         self.alg_cfg = train_cfg["algorithm"]
         self.policy_cfg = train_cfg["policy"]
         self.device = device
         self.env = env
-        
-        print("=================================================")
-        print("TeacherPolicyRunner.__init__ IS CALLED!")
-        print("=================================================")
 
-        proprio_obs_dim = self.env.num_obs
-        action_dim = self.env.num_actions
-        
-        # 从字典中获取 actor/critic 隐藏层维度
-        actor_hidden_dims = self.policy_cfg['actor_hidden_dims']
-        critic_hidden_dims = self.policy_cfg['critic_hidden_dims']
-        
-        teacher_policy = TeacherPolicy(
-            proprio_obs_dim=proprio_obs_dim,
-            action_dim=action_dim,
-            history_steps=history_steps,
-            num_links=4,
-            actor_hidden_dims=actor_hidden_dims,
-            critic_hidden_dims=critic_hidden_dims,
-        ).to(self.device)
+        # 多GPU配置 (从父类复制)
+        self._configure_multi_gpu()
 
-        self.alg = PPO(
-            actor_critic=teacher_policy,
-            device=self.device,
-            **self.alg_cfg  # self.alg_cfg 现在本身就是字典，可以直接解包
-        )
-        
-        if hasattr(teacher_policy, 'num_critic_obs'):
-             num_critic_obs = teacher_policy.num_critic_obs
+        # 训练类型 (从父类复制)
+        if self.alg_cfg["class_name"] == "PPO":
+            self.training_type = "rl"
+        elif self.alg_cfg["class_name"] == "Distillation":
+            self.training_type = "distillation"
         else:
-             print("[WARNING] TeacherPolicy does not have 'num_critic_obs' attribute. Using num_obs as fallback.")
-             num_critic_obs = proprio_obs_dim
+            raise ValueError(f"Training type not found for algorithm {self.alg_cfg['class_name']}.")
 
-        # 使用字典键访问
-        self.alg.init_storage(self.env.num_envs, self.cfg["num_steps_per_env"], [proprio_obs_dim], [num_critic_obs], [action_dim])
+        # 解析观测维度 (从父类复制)
+        obs, extras = self.env.get_observations()
+        num_obs = obs.shape[1]
+        
+        # 关键修复：添加这部分缺失的逻辑，用于设置特权观察的类型
+        if self.training_type == "rl":
+            if "critic" in extras["observations"]:
+                self.privileged_obs_type = "critic"
+            else:
+                self.privileged_obs_type = None
+        if self.training_type == "distillation":
+            if "teacher" in extras["observations"]:
+                self.privileged_obs_type = "teacher"
+            else:
+                self.privileged_obs_type = None
 
+        # 关键修复：使用更通用的方式解析特权观测的维度
+        if self.privileged_obs_type is not None:
+            num_privileged_obs = extras["observations"][self.privileged_obs_type].shape[1]
+        else:
+            num_privileged_obs = num_obs
+
+        # 2. **在这里创建我们自己的 TeacherPolicy 实例**
+        # policy_cfg 中包含了 actor_hidden_dims 等所有需要的参数
+        policy = TeacherPolicy(
+            num_actor_obs=num_obs,
+            num_critic_obs=num_privileged_obs,
+            num_actions=self.env.num_actions,
+            **self.policy_cfg
+        ).to(self.device)
+        
+        print(f"Successfully created policy of type: {type(policy)}")
+
+        # 3. 创建算法实例，并将我们的策略实例传给它
+        alg_class = eval(self.alg_cfg.pop("class_name"))
+        self.alg: PPO = alg_class(
+            policy, device=self.device, **self.alg_cfg, multi_gpu_cfg=self.multi_gpu_cfg
+        )
+
+        # 4. 完成剩余的初始化 (从父类 OnPolicyRunner.__init__ 复制)
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
-        self.current_learning_iteration = 0
-        self.writer = None
         
-        # TODO: 替换默认的actor_critic为TeacherPolicy
-        # self._init_teacher_policy()
+        # 初始化经验归一化
+        self.empirical_normalization = self.cfg["empirical_normalization"]
+        if self.empirical_normalization:
+            self.obs_normalizer = EmpiricalNormalization(shape=[num_obs], until=1.0e8).to(self.device)
+            self.privileged_obs_normalizer = EmpiricalNormalization(shape=[num_privileged_obs], until=1.0e8).to(self.device)
+        else:
+            self.obs_normalizer = torch.nn.Identity().to(self.device)
+            self.privileged_obs_normalizer = torch.nn.Identity().to(self.device)
+
+        # 初始化存储
+        self.alg.init_storage(
+            self.training_type,
+            self.env.num_envs,
+            self.num_steps_per_env,
+            [num_obs],
+            [num_privileged_obs],
+            [self.env.num_actions],
+        )
+
+        # 日志相关设置
+        self.disable_logs = self.is_distributed and self.gpu_global_rank != 0
+        self.log_dir = log_dir
+        self.writer = None
+        self.tot_timesteps = 0
+        self.tot_time = 0
+        self.current_learning_iteration = 0
+        self.git_status_repos = [rsl_rl.__file__]
+
+        # 你的自定义初始化
+        self.collision_loss_fn = nn.BCELoss()
+        self.collision_loss_buffer = deque(maxlen=100)
         
         # TODO: 初始化历史观测缓存
         self.history_buffer = None
         # self._init_history_buffer()
-        
-        # TODO: 初始化碰撞估计损失函数
-        self.collision_loss_fn = nn.BCELoss()
-        
-        # TODO: 添加额外的日志记录器
-        self.collision_loss_buffer = deque(maxlen=100)
         
     def _init_teacher_policy(self):
         """

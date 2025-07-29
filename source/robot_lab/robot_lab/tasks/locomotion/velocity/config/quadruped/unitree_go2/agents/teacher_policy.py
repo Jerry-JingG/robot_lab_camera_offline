@@ -100,7 +100,8 @@ class CollisionDomainEncoder(nn.Module):
         pass
 
 
-class TeacherPolicy(nn.Module):
+# 关键修复：确保这里继承自 ActorCritic，而不是 nn.Module
+class TeacherPolicy(ActorCritic):
     """
     教师策略网络 - 基于论文架构图实现
     
@@ -118,221 +119,237 @@ class TeacherPolicy(nn.Module):
     """
     
     def __init__(self,
-                 proprio_obs_dim: int,
-                 action_dim: int,
-                 history_steps: int = 10,
-                 num_links: int = 4,
-                 grid_size: Tuple[int, int] = (20, 20),
-                 latent_dim: int = 64,
+                 num_actor_obs: int,
+                 num_critic_obs: int,
+                 num_actions: int,
                  actor_hidden_dims: list = [512, 256, 128],
-                 critic_hidden_dims: list = [512, 256, 128]):
+                 critic_hidden_dims: list = [512, 256, 128],
+                 activation: str = 'elu',
+                 init_noise_std: float = 1.0,
+                 **kwargs):
         """
         初始化教师策略网络
         
         Args:
-            proprio_obs_dim: 本体观测维度
-            action_dim: 动作空间维度
-            history_steps: 历史观测步数
-            num_links: 机器人连杆数量
-            grid_size: 碰撞域网格尺寸
-            latent_dim: 碰撞域编码器输出维度
+            num_actor_obs: Actor的观测维度
+            num_critic_obs: Critic的观测维度 (特权信息)
+            num_actions: 动作空间维度
             actor_hidden_dims: Actor网络隐藏层维度
             critic_hidden_dims: Critic网络隐藏层维度
         """
-        super(TeacherPolicy, self).__init__()
+        # 首先调用父类ActorCritic的构造函数，完成标准网络的搭建
+        super().__init__(
+            num_actor_obs=num_actor_obs,
+            num_critic_obs=num_critic_obs,
+            num_actions=num_actions,
+            actor_hidden_dims=actor_hidden_dims,
+            critic_hidden_dims=critic_hidden_dims,
+            activation=activation,
+            init_noise_std=init_noise_std,
+            **kwargs
+        )
         
         print("-------------------------------------------------")
         print(f"TeacherPolicy.__init__ IS CALLED! I am the policy!")
         print("-------------------------------------------------")
         
-        self.proprio_obs_dim = proprio_obs_dim
-        self.action_dim = action_dim
-        self.history_steps = history_steps
-        self.num_links = num_links
-        self.latent_dim = latent_dim
+        # 在这里，您可以继续初始化您自己的特定模块
+        # 例如，碰撞估计模型等。现在为了验证流程，可以暂时留空。
+        # self.collision_estimation_model = ...
+        # self.collision_domain_encoder = ...
+
+        # 目前不需要重写 act, evaluate, forward 等方法
+        # 因为父类 ActorCritic 已经为我们提供了标准的实现
+        # 后续您可以根据需要重写它们，加入特权信息处理逻辑
         
-        # TODO: 实现碰撞估计模型
-        self.collision_estimation_model = CollisionEstimationModel(
-            proprio_obs_dim=proprio_obs_dim,
-            history_steps=history_steps,
-            num_links=num_links
-        )
+        # self.proprio_obs_dim = proprio_obs_dim
+        # self.action_dim = action_dim
+        # self.history_steps = history_steps
+        # self.num_links = num_links
+        # self.latent_dim = latent_dim
         
-        # TODO: 实现碰撞域编码器
-        self.collision_domain_encoder = CollisionDomainEncoder(
-            grid_size=grid_size,
-            latent_dim=latent_dim
-        )
+        # # TODO: 实现碰撞估计模型
+        # self.collision_estimation_model = CollisionEstimationModel(
+        #     proprio_obs_dim=proprio_obs_dim,
+        #     history_steps=history_steps,
+        #     num_links=num_links
+        # )
         
-        # TODO: 实现本体感知信息处理模块
-        self.proprio_processor = None
+        # # TODO: 实现碰撞域编码器
+        # self.collision_domain_encoder = CollisionDomainEncoder(
+        #     grid_size=grid_size,
+        #     latent_dim=latent_dim
+        # )
         
-        # TODO: 实现历史本体感知信息处理模块
-        self.history_proprio_processor = None
+        # # TODO: 实现本体感知信息处理模块
+        # self.proprio_processor = None
         
-        # TODO: 计算策略网络输入维度
-        # 应该包括：当前本体观测 + 碰撞域潜在特征 + 碰撞估计概率
-        policy_input_dim = proprio_obs_dim + latent_dim + num_links
+        # # TODO: 实现历史本体感知信息处理模块
+        # self.history_proprio_processor = None
         
-        # TODO: 实现Actor-Critic策略网络
-        self.actor_critic = ActorCritic(
-            num_actor_obs=policy_input_dim,
-            num_critic_obs=policy_input_dim,
-            num_actions=action_dim,
-            actor_hidden_dims=actor_hidden_dims,
-            critic_hidden_dims=critic_hidden_dims,
-            activation='elu'
-        )
+        # # TODO: 计算策略网络输入维度
+        # # 应该包括：当前本体观测 + 碰撞域潜在特征 + 碰撞估计概率
+        # policy_input_dim = proprio_obs_dim + latent_dim + num_links
         
-        # TODO: 实现历史观测缓存
-        self.history_buffer = None
+        # # TODO: 实现Actor-Critic策略网络
+        # self.actor_critic = ActorCritic(
+        #     num_actor_obs=policy_input_dim,
+        #     num_critic_obs=policy_input_dim,
+        #     num_actions=action_dim,
+        #     actor_hidden_dims=actor_hidden_dims,
+        #     critic_hidden_dims=critic_hidden_dims,
+        #     activation='elu'
+        # )
+        
+        # # TODO: 实现历史观测缓存
+        # self.history_buffer = None
     
-    def update_history(self, current_obs: torch.Tensor) -> None:
-        """
-        更新历史观测缓存
+    # def update_history(self, current_obs: torch.Tensor) -> None:
+    #     """
+    #     更新历史观测缓存
         
-        Args:
-            current_obs: 当前观测 (B, proprio_obs_dim)
-        """
-        # TODO: 实现历史观测缓存更新逻辑
-        pass
+    #     Args:
+    #         current_obs: 当前观测 (B, proprio_obs_dim)
+    #     """
+    #     # TODO: 实现历史观测缓存更新逻辑
+    #     pass
     
-    def process_proprioception_info(self, obs: torch.Tensor) -> torch.Tensor:
-        """
-        处理当前本体感知信息
+    # def process_proprioception_info(self, obs: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     处理当前本体感知信息
         
-        Args:
-            obs: 当前本体观测 (B, proprio_obs_dim)
+    #     Args:
+    #         obs: 当前本体观测 (B, proprio_obs_dim)
             
-        Returns:
-            processed_obs: 处理后的观测特征
-        """
-        # TODO: 实现本体感知信息处理
-        # 可能包括归一化、特征提取等
-        return obs
+    #     Returns:
+    #         processed_obs: 处理后的观测特征
+    #     """
+    #     # TODO: 实现本体感知信息处理
+    #     # 可能包括归一化、特征提取等
+    #     return obs
     
-    def get_collision_estimation(self, history_obs: torch.Tensor) -> torch.Tensor:
-        """
-        获取碰撞估计概率
+    # def get_collision_estimation(self, history_obs: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     获取碰撞估计概率
         
-        Args:
-            history_obs: 历史观测 (B, history_steps, proprio_obs_dim)
+    #     Args:
+    #         history_obs: 历史观测 (B, history_steps, proprio_obs_dim)
             
-        Returns:
-            collision_probs: 碰撞概率 (B, num_links)
-        """
-        # TODO: 调用碰撞估计模型
-        return self.collision_estimation_model(history_obs)
+    #     Returns:
+    #         collision_probs: 碰撞概率 (B, num_links)
+    #     """
+    #     # TODO: 调用碰撞估计模型
+    #     return self.collision_estimation_model(history_obs)
     
-    def encode_collision_domain(self, collision_domain: torch.Tensor) -> torch.Tensor:
-        """
-        编码碰撞域信息
+    # def encode_collision_domain(self, collision_domain: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     编码碰撞域信息
         
-        Args:
-            collision_domain: 碰撞域网格 (B, 1, H, W)
+    #     Args:
+    #         collision_domain: 碰撞域网格 (B, 1, H, W)
             
-        Returns:
-            domain_features: 域特征 (B, latent_dim)
-        """
-        # TODO: 调用碰撞域编码器
-        return self.collision_domain_encoder(collision_domain)
+    #     Returns:
+    #         domain_features: 域特征 (B, latent_dim)
+    #     """
+    #     # TODO: 调用碰撞域编码器
+    #     return self.collision_domain_encoder(collision_domain)
     
-    def forward(self, 
-                obs: torch.Tensor, 
-                collision_domain: torch.Tensor,
-                history_obs: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        教师策略前向传播
+    # def forward(self, 
+    #             obs: torch.Tensor, 
+    #             collision_domain: torch.Tensor,
+    #             history_obs: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    #     """
+    #     教师策略前向传播
         
-        Args:
-            obs: 当前本体观测 (B, proprio_obs_dim)
-            collision_domain: 真实碰撞域网格 (B, 1, H, W) - 特权信息
-            history_obs: 历史观测 (B, history_steps, proprio_obs_dim)
+    #     Args:
+    #         obs: 当前本体观测 (B, proprio_obs_dim)
+    #         collision_domain: 真实碰撞域网格 (B, 1, H, W) - 特权信息
+    #         history_obs: 历史观测 (B, history_steps, proprio_obs_dim)
             
-        Returns:
-            action_mean: 动作均值 (B, action_dim)
-            value: 状态价值 (B, 1)
-        """
-        # TODO: 实现完整的前向传播流程
+    #     Returns:
+    #         action_mean: 动作均值 (B, action_dim)
+    #         value: 状态价值 (B, 1)
+    #     """
+    #     # TODO: 实现完整的前向传播流程
         
-        # 1. 处理当前本体感知信息
-        # processed_obs = self.process_proprioception_info(obs)
+    #     # 1. 处理当前本体感知信息
+    #     # processed_obs = self.process_proprioception_info(obs)
         
-        # 2. 编码碰撞域信息（特权信息）
-        # domain_features = self.encode_collision_domain(collision_domain)
+    #     # 2. 编码碰撞域信息（特权信息）
+    #     # domain_features = self.encode_collision_domain(collision_domain)
         
-        # 3. 获取碰撞估计（如果有历史观测）
-        # if history_obs is not None:
-        #     collision_probs = self.get_collision_estimation(history_obs)
-        # else:
-        #     # 如果没有历史观测，使用零向量
-        #     collision_probs = torch.zeros(obs.shape[0], self.num_links, device=obs.device)
+    #     # 3. 获取碰撞估计（如果有历史观测）
+    #     # if history_obs is not None:
+    #     #     collision_probs = self.get_collision_estimation(history_obs)
+    #     # else:
+    #     #     # 如果没有历史观测，使用零向量
+    #     #     collision_probs = torch.zeros(obs.shape[0], self.num_links, device=obs.device)
         
-        # 4. 拼接所有特征作为策略输入
-        # policy_input = torch.cat([processed_obs, domain_features, collision_probs], dim=-1)
+    #     # 4. 拼接所有特征作为策略输入
+    #     # policy_input = torch.cat([processed_obs, domain_features, collision_probs], dim=-1)
         
-        # 5. 通过Actor-Critic网络获取动作和价值
-        # TODO: 实现策略网络调用
-        # action_mean = self.actor_critic.act(policy_input)
-        # value = self.actor_critic.evaluate(policy_input)
-        action_mean = None
-        value = None
+    #     # 5. 通过Actor-Critic网络获取动作和价值
+    #     # TODO: 实现策略网络调用
+    #     # action_mean = self.actor_critic.act(policy_input)
+    #     # value = self.actor_critic.evaluate(policy_input)
+    #     action_mean = None
+    #     value = None
         
-        return action_mean, value
+    #     return action_mean, value
     
-    def act(self, 
-            obs: torch.Tensor, 
-            collision_domain: torch.Tensor,
-            history_obs: Optional[torch.Tensor] = None,
-            deterministic: bool = False) -> torch.Tensor:
-        """
-        执行动作选择
+    # def act(self, 
+    #         obs: torch.Tensor, 
+    #         collision_domain: torch.Tensor,
+    #         history_obs: Optional[torch.Tensor] = None,
+    #         deterministic: bool = False) -> torch.Tensor:
+    #     """
+    #     执行动作选择
         
-        Args:
-            obs: 当前观测
-            collision_domain: 碰撞域
-            history_obs: 历史观测
-            deterministic: 是否确定性选择动作
+    #     Args:
+    #         obs: 当前观测
+    #         collision_domain: 碰撞域
+    #         history_obs: 历史观测
+    #         deterministic: 是否确定性选择动作
             
-        Returns:
-            action: 选择的动作
-        """
-        # TODO: 实现动作选择逻辑
-        pass
+    #     Returns:
+    #         action: 选择的动作
+    #     """
+    #     # TODO: 实现动作选择逻辑
+    #     pass
     
-    def evaluate(self, 
-                 obs: torch.Tensor, 
-                 collision_domain: torch.Tensor,
-                 history_obs: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        评估状态价值
+    # def evaluate(self, 
+    #              obs: torch.Tensor, 
+    #              collision_domain: torch.Tensor,
+    #              history_obs: Optional[torch.Tensor] = None) -> torch.Tensor:
+    #     """
+    #     评估状态价值
         
-        Args:
-            obs: 当前观测
-            collision_domain: 碰撞域
-            history_obs: 历史观测
+    #     Args:
+    #         obs: 当前观测
+    #         collision_domain: 碰撞域
+    #         history_obs: 历史观测
             
-        Returns:
-            value: 状态价值
-        """
-        # TODO: 实现状态价值评估
-        pass
+    #     Returns:
+    #         value: 状态价值
+    #     """
+    #     # TODO: 实现状态价值评估
+    #     pass
     
-    def get_collision_loss(self, 
-                           history_obs: torch.Tensor, 
-                           true_collision_labels: torch.Tensor) -> torch.Tensor:
-        """
-        计算碰撞估计损失（用于训练碰撞估计模型）
+    # def get_collision_loss(self, 
+    #                        history_obs: torch.Tensor, 
+    #                        true_collision_labels: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     计算碰撞估计损失（用于训练碰撞估计模型）
         
-        Args:
-            history_obs: 历史观测
-            true_collision_labels: 真实碰撞标签 (B, num_links)
+    #     Args:
+    #         history_obs: 历史观测
+    #         true_collision_labels: 真实碰撞标签 (B, num_links)
             
-        Returns:
-            collision_loss: 碰撞估计损失
-        """
-        # TODO: 实现碰撞估计损失计算
-        # 使用二元交叉熵损失
-        predicted_probs = self.get_collision_estimation(history_obs)
-        loss_fn = nn.BCELoss()
-        return loss_fn(predicted_probs, true_collision_labels.float())
+    #     Returns:
+    #         collision_loss: 碰撞估计损失
+    #     """
+    #     # TODO: 实现碰撞估计损失计算
+    #     # 使用二元交叉熵损失
+    #     predicted_probs = self.get_collision_estimation(history_obs)
+    #     loss_fn = nn.BCELoss()
+    #     return loss_fn(predicted_probs, true_collision_labels.float())

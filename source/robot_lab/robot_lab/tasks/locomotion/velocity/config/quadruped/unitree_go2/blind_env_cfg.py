@@ -3,8 +3,12 @@
 
 import torch
 from isaaclab.utils import configclass
+<<<<<<< HEAD
 from isaaclab.sensors import RayCasterCfg, patterns
 from collections.abc import Callable
+=======
+from isaaclab.sensors.ray_caster import RayCasterCfg, patterns
+>>>>>>> 9cad685 (能跑通teacher_policy_runner生成teacher_policy开始训练的一版)
 
 from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     MySceneCfg,
@@ -90,7 +94,7 @@ class BlindSceneCfg(MySceneCfg):
 
 @configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
-    scene: BlindSceneCfg = BlindSceneCfg()
+    scene: BlindSceneCfg = BlindSceneCfg(num_envs=4096, env_spacing=2.5)
     base_link_name = "base"
     foot_link_name = ".*_foot"
     # fmt: off
