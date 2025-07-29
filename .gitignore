@@ -41,3 +41,6 @@ _build
 
 config.yaml
 .asset_hash
+
+.flake8
+

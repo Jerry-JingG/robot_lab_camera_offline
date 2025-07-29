@@ -3,7 +3,10 @@
 
 from isaaclab.utils import configclass
 
-from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
+from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
+    MySceneCfg,
+    LocomotionVelocityRoughEnvCfg,
+)
 
 ##
 # Pre-defined configs
@@ -15,12 +18,20 @@ from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
 
 
 @configclass
+class BlindSceneCfg(MySceneCfg):
+    collision_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
+        attach_yaw_only=True,
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
 
 
-#TODO:继承出来新建一个适合于blind任务的环境配置
-
-
+@configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
+    scene: BlindSceneCfg = BlindSceneCfg()
     base_link_name = "base"
     foot_link_name = ".*_foot"
     # fmt: off
