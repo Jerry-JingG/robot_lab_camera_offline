@@ -3,14 +3,21 @@
 
 import torch
 from isaaclab.utils import configclass
+from isaaclab.envs import ManagerBasedEnv
 from isaaclab.sensors import RayCasterCfg, patterns
+from isaaclab.managers import ObservationGroupCfg as ObsGroup
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.managers import ObservationTermCfg as ObsTerm
 from collections.abc import Callable
 
 from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     MySceneCfg,
+    ObservationsCfg,
     LocomotionVelocityRoughEnvCfg,
 )
-
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils, utils_cfg
+import robot_lab.tasks.locomotion.velocity.mdp as mdp
 ##
 # Pre-defined configs
 ##
@@ -67,6 +74,11 @@ def grid_pattern_vertical(cfg: patterns.GridPatternCfg, device: str) -> tuple[to
     return ray_starts, ray_directions
 
 
+def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.5) -> torch.Tensor:
+    sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
+    return sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
+
+
 @configclass 
 class GridPatternVerticalCfg(patterns.GridPatternCfg):
     """Vertical grid pattern configuration for ray casting in YZ plane."""
@@ -78,14 +90,30 @@ class GridPatternVerticalCfg(patterns.GridPatternCfg):
 @configclass
 class BlindSceneCfg(MySceneCfg):
     # 重写collision_scanner使用垂直网格模式
-    collision_scanner = RayCasterCfg(
+    collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
         attach_yaw_only=True,
         pattern_cfg=GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
         debug_vis=True,
         mesh_prim_paths=["/World/ground"],
+        max_distance=1.0,
     )
+
+
+@configclass
+class BlindObsCfg(ObservationsCfg):
+    @configclass
+    class CollisionDomainCfg(ObsGroup):
+        collision_scan = ObsTerm(
+            func=collision_scan,
+            params={"sensor_cfg": SceneEntityCfg("collision_scanner")},
+            noise=Unoise(n_min=-0.1, n_max=0.1),
+            clip=(-1.0, 1.0),
+            scale=1.0,
+        )
+    def __post_init__(self):
+            super().__post_init__()
 
 
 @configclass
