@@ -4,12 +4,10 @@
 import torch
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedEnv
-from isaaclab.sensors import RayCasterCfg, patterns
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.managers import ObservationTermCfg as ObsTerm
-from collections.abc import Callable
 
 from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     MySceneCfg,
@@ -17,7 +15,6 @@ from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     LocomotionVelocityRoughEnvCfg,
 )
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils, utils_cfg
-import robot_lab.tasks.locomotion.velocity.mdp as mdp
 ##
 # Pre-defined configs
 ##
@@ -27,64 +24,10 @@ import robot_lab.tasks.locomotion.velocity.mdp as mdp
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
 
 
-def grid_pattern_vertical(cfg: patterns.GridPatternCfg, device: str) -> tuple[torch.Tensor, torch.Tensor]:
-    # 从isaaclab.sensors.patterns复制一个pattern函数并改写成vertical形式（YZ平面）
-    """A regular grid pattern for ray casting in YZ plane.
-
-    The grid pattern is made from rays that are parallel to each other. They span a 2D grid in the sensor's
-    local YZ coordinates from ``(-width/2, -height/2)`` to ``(width/2, height/2)``, which is defined
-    by the ``size = (width, height)`` and ``resolution`` parameters in the config.
-
-    Args:
-        cfg: The configuration instance for the pattern.
-        device: The device to create the pattern on.
-
-    Returns:
-        The starting positions and directions of the rays.
-
-    Raises:
-        ValueError: If the ordering is not "xy" or "yx".
-        ValueError: If the resolution is less than or equal to 0.
-    """
-    # check valid arguments
-    if cfg.ordering not in ["xy", "yx"]:
-        raise ValueError(f"Ordering must be 'xy' or 'yx'. Received: '{cfg.ordering}'.")
-    if cfg.resolution <= 0:
-        raise ValueError(f"Resolution must be greater than 0. Received: '{cfg.resolution}'.")
-
-    # resolve mesh grid indexing (note: torch meshgrid is different from numpy meshgrid)
-    # check: https://github.com/pytorch/pytorch/issues/15301
-    indexing = cfg.ordering if cfg.ordering == "xy" else "ij"
-    # define grid pattern
-    x = torch.arange(start=-cfg.size[0] / 2, end=cfg.size[0] / 2 + 1.0e-9, step=cfg.resolution, device=device)
-    y = torch.arange(start=-cfg.size[1] / 2, end=cfg.size[1] / 2 + 1.0e-9, step=cfg.resolution, device=device)
-    grid_x, grid_y = torch.meshgrid(x, y, indexing=indexing)
-
-    # store into ray starts (YZ plane instead of XY plane)
-    num_rays = grid_x.numel()
-    ray_starts = torch.zeros(num_rays, 3, device=device)
-    # X坐标保持为0，表示在YZ平面上
-    ray_starts[:, 1] = grid_x.flatten()  # Y坐标 (对应原来的X)
-    ray_starts[:, 2] = grid_y.flatten()  # Z坐标 (对应原来的Y)
-
-    # define ray-cast directions
-    ray_directions = torch.zeros_like(ray_starts)
-    ray_directions[..., :] = torch.tensor(list(cfg.direction), device=device)
-
-    return ray_starts, ray_directions
-
-
 def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.5) -> torch.Tensor:
+    # TODO:这里需要重写，主要是算hit point和sensor所在位置的距离
     sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
     return sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
-
-
-@configclass 
-class GridPatternVerticalCfg(patterns.GridPatternCfg):
-    """Vertical grid pattern configuration for ray casting in YZ plane."""
-    # 继承自GridPatternCfg，重写direction默认值和func
-    func: Callable = grid_pattern_vertical
-    direction: tuple = (1.0, 0.0, 0.0)  # 默认向前方（X轴正方向）发射
 
 
 @configclass
@@ -92,17 +35,20 @@ class BlindSceneCfg(MySceneCfg):
     # 重写collision_scanner使用垂直网格模式
     collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
+        offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
         attach_yaw_only=True,
-        pattern_cfg=GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
+        pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
         debug_vis=True,
         mesh_prim_paths=["/World/ground"],
-        max_distance=1.0,
+        max_distance=10.0,
     )
 
 
 @configclass
 class BlindObsCfg(ObservationsCfg):
+    def __post_init__(self):
+        super().__post_init__()
+
     @configclass
     class CollisionDomainCfg(ObsGroup):
         collision_scan = ObsTerm(
@@ -112,8 +58,6 @@ class BlindObsCfg(ObservationsCfg):
             clip=(-1.0, 1.0),
             scale=1.0,
         )
-    def __post_init__(self):
-            super().__post_init__()
 
 
 @configclass

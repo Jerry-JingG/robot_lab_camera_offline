@@ -1,4 +1,3 @@
-import torch
 from isaaclab.utils import configclass
 from isaaclab.sensors import RayCasterCfg, patterns
 from collections.abc import Callable

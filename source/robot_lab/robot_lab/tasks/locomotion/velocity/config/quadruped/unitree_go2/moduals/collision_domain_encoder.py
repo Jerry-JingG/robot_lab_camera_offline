@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class CollisionDomainEncoder(nn.Module):
     """
     碰撞域编码器 (三层MLP版本):
