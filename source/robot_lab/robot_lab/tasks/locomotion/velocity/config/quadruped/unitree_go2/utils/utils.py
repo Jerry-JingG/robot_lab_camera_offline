@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import torch
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import omni.physics.tensors.impl.api as physx
 from isaacsim.core.prims import XFormPrim
@@ -12,7 +13,7 @@ from isaaclab.utils.warp import raycast_mesh
 if TYPE_CHECKING:
     from . import utils_cfg
 
-from isaaclab.sensors import RayCaster, RayCasterCfg
+from isaaclab.sensors import RayCaster, RayCasterCfg, RayCasterData
 
 
 def grid_pattern_vertical(cfg: utils_cfg.GridPatternVerticalCfg, device: str) -> tuple[torch.Tensor, torch.Tensor]:
@@ -62,6 +63,13 @@ def grid_pattern_vertical(cfg: utils_cfg.GridPatternVerticalCfg, device: str) ->
     return ray_starts, ray_directions
 
 
+@dataclass
+class RayCasterVerticalData(RayCasterData):
+    """Data class for vertical ray caster sensor data."""
+    # 继承自RayCasterData，添加必要的属性
+    ray_starts_w: torch.Tensor = None
+
+
 class RayCasterVertical(RayCaster):
     """A RayCaster that uses a vertical grid pattern for ray casting in YZ plane."""
     
@@ -109,3 +117,18 @@ class RayCasterVertical(RayCaster):
             max_dist=self.cfg.max_distance,
             mesh=self.meshes[self.cfg.mesh_prim_paths[0]],
         )[0]
+        # store the ray starts in world coordinates
+        self._data.ray_starts_w[env_ids] = ray_starts_w
+
+
+def calculate_euclidean_distance(point1: torch.Tensor, point2: torch.Tensor) -> torch.Tensor:
+    """Calculate the Euclidean distance between two points.
+    
+    Args:
+        point1: First point tensor of shape (..., 3)
+        point2: Second point tensor of shape (..., 3)
+        
+    Returns:
+        Euclidean distance tensor of shape (...)
+    """
+    return torch.linalg.norm(point1 - point2, dim=-1)

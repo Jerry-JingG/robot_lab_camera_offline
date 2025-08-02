@@ -24,10 +24,9 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils impo
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
 
 
-def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.5) -> torch.Tensor:
-    # TODO:这里需要重写，主要是算hit point和sensor所在位置的距离
+def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.0) -> torch.Tensor:
     sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
-    return sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
+    return utils.calculate_euclidean_distance(sensor.data.ray_starts_w, sensor.data.ray_hits_w) - offset
 
 
 @configclass
@@ -80,6 +79,7 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
 
         # ------------------------------Sence------------------------------
         self.scene.robot = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        self.scene.collision_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
         self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
         self.scene.height_scanner_base.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
 
