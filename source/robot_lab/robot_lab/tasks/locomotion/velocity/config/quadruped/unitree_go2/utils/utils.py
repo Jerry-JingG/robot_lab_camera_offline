@@ -72,9 +72,31 @@ class RayCasterVerticalData(RayCasterData):
 
 class RayCasterVertical(RayCaster):
     """A RayCaster that uses a vertical grid pattern for ray casting in YZ plane."""
-    
+    # Add a type hint for the instance variable `_data` to inform the static type checker.
+    _data: RayCasterVerticalData
+
     def __init__(self, cfg: RayCasterCfg):
         super().__init__(cfg=cfg)
+        self._data = RayCasterVerticalData()
+
+    def _initialize_rays_impl(self):
+        self.ray_starts, self.ray_directions = self.cfg.pattern_cfg.func(self.cfg.pattern_cfg, self._device)
+        self.num_rays = len(self.ray_directions)
+        # apply offset transformation to the rays
+        offset_pos = torch.tensor(list(self.cfg.offset.pos), device=self._device)
+        offset_quat = torch.tensor(list(self.cfg.offset.rot), device=self._device)
+        self.ray_directions = quat_apply(offset_quat.repeat(len(self.ray_directions), 1), self.ray_directions)
+        self.ray_starts += offset_pos
+        # repeat the rays for each sensor
+        self.ray_starts = self.ray_starts.repeat(self._view.count, 1, 1)
+        self.ray_directions = self.ray_directions.repeat(self._view.count, 1, 1)
+        # prepare drift
+        self.drift = torch.zeros(self._view.count, 3, device=self.device)
+        # fill the data buffer
+        self._data.pos_w = torch.zeros(self._view.count, 3, device=self._device)
+        self._data.quat_w = torch.zeros(self._view.count, 4, device=self._device)
+        self._data.ray_hits_w = torch.zeros(self._view.count, self.num_rays, 3, device=self._device)
+        self._data.ray_starts_w = torch.zeros(self._view.count, self.num_rays, 3, device=self._device)
 
     def _update_buffers_impl(self, env_ids: Sequence[int]):
         """Fills the buffers of the sensor data."""

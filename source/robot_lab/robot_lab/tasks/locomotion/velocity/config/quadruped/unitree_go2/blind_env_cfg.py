@@ -45,11 +45,9 @@ class BlindSceneCfg(MySceneCfg):
 
 @configclass
 class BlindObsCfg(ObservationsCfg):
-    def __post_init__(self):
-        super().__post_init__()
 
     @configclass
-    class CollisionDomainCfg(ObsGroup):
+    class PolicyCfg(ObservationsCfg.PolicyCfg):
         collision_scan = ObsTerm(
             func=collision_scan,
             params={"sensor_cfg": SceneEntityCfg("collision_scanner")},
@@ -57,11 +55,33 @@ class BlindObsCfg(ObservationsCfg):
             clip=(-1.0, 1.0),
             scale=1.0,
         )
+    
+        def __post_init__(self):
+            # post init of parent
+            super().__post_init__()
+
+    @configclass
+    class CriticCfg(ObservationsCfg.CriticCfg):
+        collision_scan = ObsTerm(
+            func=collision_scan,
+            params={"sensor_cfg": SceneEntityCfg("collision_scanner")},
+            clip=(-1.0, 1.0),
+            scale=1.0,
+        )
+
+        def __post_init__(self):
+            # post init of parent
+            super().__post_init__()
+    
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+    critic: CriticCfg = CriticCfg()
 
 
 @configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
-    scene: BlindSceneCfg = BlindSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: BlindSceneCfg = BlindSceneCfg(num_envs=1, env_spacing=2.5)
+    observations: BlindObsCfg = BlindObsCfg()
     base_link_name = "base"
     foot_link_name = ".*_foot"
     # fmt: off
