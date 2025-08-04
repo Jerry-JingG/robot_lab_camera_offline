@@ -6,9 +6,6 @@ class CollisionEstimator(nn.Module):
     """
     碰撞检测网络 φ (Collision Estimator):
     接收过去若干时间步的本体感知观测 (proprioceptive observations)，输出机器人各部位发生碰撞的概率。
-    - 在训练阶段1（教师策略训练）中，作为辅助任务网络被训练，用实际碰撞数据监督学习。
-    - 在训练阶段2（学生策略训练）中，作为预训练好的模型，提供学生策略的碰撞估计输入。
-    该网络在 `train.py` 中初始化，并在环境每步后被调用以预测当前时刻的碰撞情况。
     """
 
     def __init__(self, input_dim: int, history_steps: int, num_links: int, hidden_dim: int = 64):
@@ -66,10 +63,3 @@ class CollisionEstimator(nn.Module):
         # pred 形状: (B, num_links)，数值在0-1之间
         return pred
 
-# 用法示例（伪代码，非实际执行）:
-# 在训练阶段1的每个时间步:
-# collision_pred = collision_estimator(obs_history)
-# 使用环境提供的实际碰撞标签 collision_label 计算损失:
-# loss_collision = BCE(collision_pred, collision_label)
-# 在阶段2，将训练好的collision_estimator用于学生策略:
-# collision_pred = collision_estimator(obs_history)  # 作为学生策略的输入之一
