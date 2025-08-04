@@ -164,10 +164,25 @@ class TeacherPolicyRunner(OnPolicyRunner):
         """
         初始化历史观测缓存
         """
-        # TODO: 实现历史观测缓存的初始化
-        # 创建形状为 (num_envs, history_steps, obs_dim) 的缓存
-        pass
+        # 获取观测维度（policy组的观测维度，即45维）
+        obs_dim = 45  # base_ang_vel(3) + projected_gravity(3) + velocity_commands(3) + joint_pos(12) + joint_vel(12) + actions(12)
+        history_steps = 10  # 历史长度
     
+        # 创建历史缓冲区：(num_envs, history_steps, obs_dim)
+        self.obs_history_buffer = torch.zeros(
+            (self.env.num_envs, history_steps, obs_dim), 
+            device=self.device
+        )
+    
+        # 初始化 CollisionEstimator
+        from ..agents.moduals.collision_estimator import CollisionEstimator
+        self.collision_estimator = CollisionEstimator(
+            input_dim=obs_dim,
+            history_steps=history_steps,
+            num_links=17,  # Go2机器人连杆数
+            hidden_dim=64
+        ).to(self.device)
+
     def _update_history_buffer(self, current_obs: torch.Tensor):
         """
         更新历史观测缓存
@@ -175,12 +190,23 @@ class TeacherPolicyRunner(OnPolicyRunner):
         Args:
             current_obs: 当前观测 (num_envs, obs_dim)
         """
-        # TODO: 实现历史观测缓存的更新逻辑
-        # 1. 将新观测添加到缓存末尾
-        # 2. 移除最旧的观测
-        # 3. 处理episode重置的情况
-        pass
+        # 将缓冲区向左移动一位（移除最旧的观测）
+        self.obs_history_buffer[:, :-1, :] = self.obs_history_buffer[:, 1:, :]
     
+        # 将新观测添加到缓冲区末尾
+        self.obs_history_buffer[:, -1, :] = current_obs
+
+    def get_collision_estimation(self) -> torch.Tensor:
+        """
+        获取当前的碰撞估计
+        
+        Returns:
+            collision_pred: 碰撞概率 (num_envs, 17)
+        """
+        with torch.no_grad():
+            collision_pred = self.collision_estimator(self.obs_history_buffer)
+        return collision_pred
+
     def _get_collision_domain_from_env(self) -> torch.Tensor:
         """
         从环境中获取真实碰撞域信息（特权信息）
@@ -211,6 +237,28 @@ class TeacherPolicyRunner(OnPolicyRunner):
             num_learning_iterations: 学习迭代次数
             init_at_random_ep_len: 是否随机初始化episode长度
         """
+        # 在训练开始前初始化历史缓冲区
+        self._init_history_buffer()
+    
+        # 调用父类的学习方法，但在其中插入我们的逻辑
+        # 这里您需要重写部分逻辑来在每个时间步调用历史更新
+    
+        for iteration in range(num_learning_iterations):
+            # 收集经验数据
+            for step in range(self.num_steps_per_env):
+                # 获取当前观测（policy组的观测）
+                obs, _ = self.env.get_observations()
+                policy_obs = obs  # 这是45维的policy观测
+                
+                # 更新历史缓冲区
+                self._update_history_buffer(policy_obs)
+                
+                # 获取碰撞估计（可用于训练辅助任务或其他用途）
+                collision_pred = self.get_collision_estimation()
+                
+                # 执行动作，获取奖励等（调用父类逻辑）
+                # ...
+        
         # TODO: 实现Teacher Policy的训练循环
         # 1. 初始化日志记录器
         # 2. 获取初始观测和特权信息

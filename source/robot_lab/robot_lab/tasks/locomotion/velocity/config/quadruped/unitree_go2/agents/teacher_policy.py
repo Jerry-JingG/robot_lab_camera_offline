@@ -122,8 +122,6 @@ class TeacherPolicy(ActorCritic):
                  num_actor_obs: int,
                  num_critic_obs: int,
                  num_actions: int,
-                 num_rays: int,  # <--- 新增encoder参数
-                 latent_dim: int = 64, # <--- 新增encoder参数
                  actor_hidden_dims: list = [512, 256, 128],
                  critic_hidden_dims: list = [512, 256, 128],
                  activation: str = 'elu',
@@ -141,8 +139,8 @@ class TeacherPolicy(ActorCritic):
         """
         # 首先调用父类ActorCritic的构造函数，完成标准网络的搭建
         super().__init__(
-            num_actor_obs=num_actor_obs + latent_dim, # Actor的输入 = 原始观测 + 潜在特征
-            num_critic_obs=num_critic_obs + latent_dim, # Critic的输入 = 原始特权观测 + 潜在特征
+            num_actor_obs=num_actor_obs, # Actor的输入 = 原始观测 + 潜在特征
+            num_critic_obs=num_critic_obs, # Critic的输入 = 原始特权观测 + 潜在特征
             num_actions=num_actions,
             actor_hidden_dims=actor_hidden_dims,
             critic_hidden_dims=critic_hidden_dims,
@@ -155,40 +153,40 @@ class TeacherPolicy(ActorCritic):
         print(f"TeacherPolicy.__init__ IS CALLED! I am the policy!")
         print("-------------------------------------------------")
         
-        # 实例化我们新的碰撞域编码器
-        self.collision_domain_encoder = CollisionDomainEncoder(
-            num_rays=num_rays,
-            hidden_dims=[256, 128, latent_dim] # 输出维度与latent_dim保持一致
-        )
+    #     # 实例化我们新的碰撞域编码器
+    #     self.collision_domain_encoder = CollisionDomainEncoder(
+    #         num_rays=num_rays,
+    #         hidden_dims=[256, 128, latent_dim] # 输出维度与latent_dim保持一致
+    #     )
         
-        # 保存维度信息，方便forward中使用
-        self.latent_dim = latent_dim
-        self.num_actor_obs = num_actor_obs
+    #     # 保存维度信息，方便forward中使用
+    #     self.latent_dim = latent_dim
+    #     self.num_actor_obs = num_actor_obs
     
-    def forward(self, observations: torch.Tensor, privileged_observations: torch.Tensor = None, **kwargs):
-        """
-        重写forward方法以处理特权信息。
-        """
-        # 1. 从环境中获取的特权信息中分离出碰撞射线数据
-        #    我们约定碰撞射线数据放在 privileged_observations 的末尾
-        collision_rays = privileged_observations[:, -self.collision_domain_encoder.num_rays:]
+    # def forward(self, observations: torch.Tensor, privileged_observations: torch.Tensor = None, **kwargs):
+    #     """
+    #     重写forward方法以处理特权信息。
+    #     """
+    #     # 1. 从环境中获取的特权信息中分离出碰撞射线数据
+    #     #    我们约定碰撞射线数据放在 privileged_observations 的末尾
+    #     collision_rays = privileged_observations[:, -self.collision_domain_encoder.num_rays:]
         
-        # 2. 使用编码器将射线数据编码为潜在特征
-        latent_feat = self.collision_domain_encoder(collision_rays)
+    #     # 2. 使用编码器将射线数据编码为潜在特征
+    #     latent_feat = self.collision_domain_encoder(collision_rays)
 
-        # 3. 将潜在特征与原始观测拼接，作为策略网络的最终输入
-        actor_obs = torch.cat((observations, latent_feat), dim=-1)
+    #     # 3. 将潜在特征与原始观测拼接，作为策略网络的最终输入
+    #     actor_obs = torch.cat((observations, latent_feat), dim=-1)
         
-        # Critic的输入也同样处理
-        # 假设critic的特权信息不包含射线数据，如果包含则需从中分离
-        critic_obs = torch.cat((privileged_observations, latent_feat), dim=-1)
+    #     # Critic的输入也同样处理
+    #     # 假设critic的特权信息不包含射线数据，如果包含则需从中分离
+    #     critic_obs = torch.cat((privileged_observations, latent_feat), dim=-1)
 
-        # 4. 调用父类（或内置）的actor和critic网络
-        actions_mean = self.actor(actor_obs)
-        value = self.critic(critic_obs)
+    #     # 4. 调用父类（或内置）的actor和critic网络
+    #     actions_mean = self.actor(actor_obs)
+    #     value = self.critic(critic_obs)
         
-        # 返回动作均值、价值和动作标准差（由父类管理）
-        return actions_mean, value, self.std
+    #     # 返回动作均值、价值和动作标准差（由父类管理）
+    #     return actions_mean, value, self.std
         
         # 在这里，您可以继续初始化您自己的特定模块
         # 例如，碰撞估计模型等。现在为了验证流程，可以暂时留空。
