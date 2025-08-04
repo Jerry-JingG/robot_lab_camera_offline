@@ -15,6 +15,8 @@ from dataclasses import asdict
 from rsl_rl.algorithms import PPO
 from ..agents.teacher_policy import TeacherPolicy
 
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules import CollisionEstimator
+
 class TeacherPolicyRunner(OnPolicyRunner):
     """
     Teacher Policy训练器 - 继承自RSL-RL的OnPolicyRunner
@@ -175,7 +177,6 @@ class TeacherPolicyRunner(OnPolicyRunner):
         )
     
         # 初始化 CollisionEstimator
-        from ..agents.moduals.collision_estimator import CollisionEstimator
         self.collision_estimator = CollisionEstimator(
             input_dim=obs_dim,
             history_steps=history_steps,
