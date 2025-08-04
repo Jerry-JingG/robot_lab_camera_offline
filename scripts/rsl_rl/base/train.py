@@ -148,6 +148,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             print(" -", bn, file=sys.stderr)
         print("=== end ===\n", file=sys.stderr)
         
+    obs=env.unwrapped.observation_manager
+    print("================observations===================")
+    print(obs)
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
