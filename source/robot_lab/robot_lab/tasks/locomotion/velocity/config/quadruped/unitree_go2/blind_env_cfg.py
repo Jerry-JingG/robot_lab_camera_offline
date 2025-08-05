@@ -2,12 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedEnv
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.terrains import TerrainImporterCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 
 from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     MySceneCfg,
@@ -22,6 +25,7 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils impo
 # from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 # use local assets
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrain import POST_DISASTER_TERRAINS_CFG
 
 
 def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.0) -> torch.Tensor:
@@ -32,6 +36,25 @@ def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: flo
 @configclass
 class BlindSceneCfg(MySceneCfg):
     # 重写collision_scanner使用垂直网格模式
+    terrain = TerrainImporterCfg(
+        prim_path="/World/ground",
+        terrain_type="generator",
+        terrain_generator=POST_DISASTER_TERRAINS_CFG,
+        max_init_terrain_level=5,
+        collision_group=-1,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+        ),
+        visual_material=sim_utils.MdlFileCfg(
+            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            project_uvw=True,
+            texture_scale=(0.25, 0.25),
+        ),
+        debug_vis=False,
+    )
     collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
