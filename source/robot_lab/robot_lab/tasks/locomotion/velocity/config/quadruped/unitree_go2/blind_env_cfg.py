@@ -32,6 +32,12 @@ def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: flo
     sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
     return utils.calculate_euclidean_distance(sensor.data.ray_starts_w, sensor.data.ray_hits_w) - offset
 
+def collision_predictions_placeholder(env: ManagerBasedEnv) -> torch.Tensor:
+    num_envs = env.num_envs
+    device = env.device
+    # 返回17维的全0向量，代表"暂时没有碰撞预测信息"
+    # 这17维对应机器人的17个主要连杆/部位
+    return torch.zeros(num_envs, 17, dtype=torch.float32, device=device)
 
 @configclass
 class BlindSceneCfg(MySceneCfg):
@@ -78,7 +84,15 @@ class BlindObsCfg(ObservationsCfg):
             clip=(-1.0, 1.0),
             scale=1.0,
         )
-    
+
+        collision_predictions = ObsTerm(
+            func=collision_predictions_placeholder,
+            params={},  # 不需要额外参数
+            noise=None,  # 碰撞预测不需要噪声
+            clip=(0.0, 1.0),  # 概率值限制在0-1之间
+            scale=1.0,
+        )
+        
         def __post_init__(self):
             # post init of parent
             super().__post_init__()
@@ -92,6 +106,14 @@ class BlindObsCfg(ObservationsCfg):
             scale=1.0,
         )
 
+        collision_predictions = ObsTerm(
+            func=collision_predictions_placeholder,
+            params={},
+            noise=None,
+            clip=(0.0, 1.0),
+            scale=1.0,
+        )
+        
         def __post_init__(self):
             # post init of parent
             super().__post_init__()
