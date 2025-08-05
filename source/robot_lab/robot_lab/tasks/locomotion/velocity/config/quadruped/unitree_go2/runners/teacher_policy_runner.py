@@ -53,30 +53,38 @@ class TeacherPolicyRunner(OnPolicyRunner):
         初始化历史观测缓存
         """
         # 获取观测维度
-        obs_dim = self.env.get_observations()[0].shape[1]
-        history_steps = self.history_steps  # 历史长度
+        full_obs = self.env.get_observations()[0]
+        base_obs_dim = full_obs.shape[1] - 17
+        print(f"历史缓存维度: {base_obs_dim}")
+        history_steps = self.history_steps
     
-        # 创建历史缓冲区：(num_envs, history_steps, obs_dim)
+        # 创建历史缓冲区：(num_envs, history_steps, base_obs_dim)
         self.obs_history_buffer = torch.zeros(
-            (self.env.num_envs, history_steps, obs_dim), 
+            (self.env.num_envs, history_steps, base_obs_dim), 
             device=self.device
         )
     
     # 初始化 CollisionEstimator
-    def _init_collision_estimator(self): # 新增一个方法来初始化碰撞估计器
+    def _init_collision_estimator(self):
         """
         初始化碰撞估计器和其优化器
         """
-        # 初始化 CollisionEstimator
+        full_obs = self.env.get_observations()[0]
+        base_obs_dim = full_obs.shape[1] - 17
+        
+        # 使用基础观测维度初始化 CollisionEstimator
         from ..modules.collision_estimator import CollisionEstimator
         self.collision_estimator = CollisionEstimator(
-            input_dim=self.env.get_observations()[0].shape[1],
+            input_dim=base_obs_dim,
             history_steps=self.history_steps,
             num_links=17,  # Go2机器人连杆数
             hidden_dim=64
         ).to(self.device)
+        
         # 为碰撞估计器创建一个独立的优化器
         self.collision_optimizer = torch.optim.Adam(self.collision_estimator.parameters(), lr=1e-3)
+        
+        print(f"碰撞估计器初始化完成，输入维度: {base_obs_dim}")
 
     def _update_history_buffer(self, current_obs: torch.Tensor):
         """
@@ -91,8 +99,32 @@ class TeacherPolicyRunner(OnPolicyRunner):
     
         # 将新观测添加到缓冲区末尾
         self.obs_history_buffer[:, -1, :] = current_obs
+        
+    def get_enhanced_obs(self, obs_data, predictions: torch.Tensor):
+        """
+        将真实的碰撞预测加入到观测中
+        
+        Args:
+            obs_data: 观测数据，可能是字典或张量
+            predictions: 碰撞估计器的17维输出
+            
+        Returns:
+            注入碰撞预测后的观测（保持原始类型）
+        """
+        base_obs = obs_data[:, :-17]  # 去掉最后17维的占位符
+        enhanced_obs = torch.cat([base_obs, predictions], dim=1)  # 拼接真实预测
+        print(f"增强观测维度: {enhanced_obs.shape}")
+        return enhanced_obs
 
-
+    def _extract_base_observations(self, obs):
+        """
+        从完整观测中提取基础观测（用于历史缓存）
+        """
+        # 如果是张量，去掉最后17维（collision_predictions占位符）
+        base_obs = obs[:, :-17]
+        # print(f"基础观测维度: {base_obs.shape}")
+        return base_obs
+    
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         """
         Args:
@@ -167,10 +199,14 @@ class TeacherPolicyRunner(OnPolicyRunner):
             # Rollout
             with torch.inference_mode():
                 for _ in range(self.num_steps_per_env):
-                    # 1. 更新历史观测缓存
-                    self._update_history_buffer(obs)
-                    # Sample actions
-                    actions = self.alg.act(obs, privileged_obs)
+                    base_obs = self._extract_base_observations(obs)  # 保存原版，用于历史缓存
+                    # 1. 更新历史观测缓存(原始观测)
+                    self._update_history_buffer(base_obs)
+                    # 2. 生成碰撞预测
+                    collision_predictions = self.collision_estimator(self.obs_history_buffer)
+                    enhanced_obs = self.get_enhanced_obs(obs, collision_predictions)
+                    # Sample actions, PPO基于增强观测
+                    actions = self.alg.act(enhanced_obs, privileged_obs)
                     # Step the environment
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
                     # Move to device
@@ -183,10 +219,9 @@ class TeacherPolicyRunner(OnPolicyRunner):
                         )
                     else:
                         privileged_obs = obs
-
-                    # process the step
+                    
                     self.alg.process_env_step(rewards, dones, infos)
-
+                
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg.rnd else None
 
@@ -225,9 +260,18 @@ class TeacherPolicyRunner(OnPolicyRunner):
 
                 # compute returns
                 if self.training_type == "rl":
-                    self.alg.compute_returns(privileged_obs)
+                    current_collision_predictions = self.collision_estimator(self.obs_history_buffer)
+                    if self.privileged_obs_type is not None:
+                        enhanced_privileged_obs = self.get_enhanced_obs(
+                            privileged_obs, current_collision_predictions
+                        )
+                    else:
+                        enhanced_privileged_obs = self.get_enhanced_obs(
+                            obs, current_collision_predictions
+                        )
+                    self.alg.compute_returns(enhanced_privileged_obs)
                                     
-            # --- 碰撞估计器训练模块 (开始“加餐”！) ---
+            # --- 碰撞估计器训练模块 ---
             # 1. 准备“标准答案”：生成17维的0/1假数据，模拟真实碰撞标签
             #    (torch.rand(...) > 0.5) 表示碰撞大约50%的概率发生
             dummy_true_collisions = (torch.rand(self.env.num_envs, 17, device=self.device) > 0.5).float()
