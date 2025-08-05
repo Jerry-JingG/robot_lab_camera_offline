@@ -25,7 +25,7 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils impo
 # from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 # use local assets
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrain import POST_DISASTER_TERRAINS_CFG
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrain import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG
 
 
 def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.0) -> torch.Tensor:
@@ -39,7 +39,7 @@ class BlindSceneCfg(MySceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=POST_DISASTER_TERRAINS_CFG,
+        terrain_generator=ALL_TERRAINS_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(

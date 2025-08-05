@@ -3,6 +3,6 @@
 
 """Terrain configurations for Unitree Go2 robot."""
 
-from .terrain_cfg import POST_DISASTER_TERRAINS_CFG
+from .terrain_cfg import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG
 
-__all__ = ["POST_DISASTER_TERRAINS_CFG"]
+__all__ = ["POST_DISASTER_TERRAINS_CFG", "ALL_TERRAINS_CFG"]
