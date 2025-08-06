@@ -25,7 +25,7 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils impo
 # from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 # use local assets
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrain import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains.config.terrain_cfg import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG, TRACK_TERRAIN_CFG
 
 
 def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.0) -> torch.Tensor:
@@ -45,7 +45,7 @@ class BlindSceneCfg(MySceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=ALL_TERRAINS_CFG,
+        terrain_generator=TRACK_TERRAIN_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -66,7 +66,7 @@ class BlindSceneCfg(MySceneCfg):
         offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
         attach_yaw_only=True,
         pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
-        debug_vis=True,
+        debug_vis=False,
         mesh_prim_paths=["/World/ground"],
         max_distance=10.0,
     )
