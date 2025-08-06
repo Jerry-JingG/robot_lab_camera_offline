@@ -125,6 +125,17 @@ class TeacherPolicyRunner(OnPolicyRunner):
         # print(f"基础观测维度: {base_obs.shape}")
         return base_obs
     
+    def get_contact_detection(self):
+        """直接调用检测函数"""
+        from robot_lab.tasks.locomotion.velocity.mdp import rewards as mdp
+        from isaaclab.managers import SceneEntityCfg
+        actual_env = self.env.unwrapped  
+        return mdp.contact_detection(
+            env=actual_env,
+            threshold=0.1,
+            sensor_cfg=SceneEntityCfg("contact_forces", body_names=".*")
+        )
+    
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         """
         Args:
@@ -215,9 +226,6 @@ class TeacherPolicyRunner(OnPolicyRunner):
                     with torch.enable_grad():
                         # 准备"标准答案"：生成17维的0/1假数据，模拟真实碰撞标签
                         dummy_true_collisions = (torch.rand(self.env.num_envs, 17, device=self.device) > 0.5).float()
-                        # 打印rollout阶段的虚拟标签（只打印第一个环境的前5维，避免输出过多）
-                        if _ < 3:  # 只打印前3步
-                            print(f"Rollout - Step {_}, Iter {it}: dummy_labels[0, :5] = {dummy_true_collisions[0, :5]}")
                         # 重新计算预测（需要梯度）
                         collision_predictions_with_grad = self.collision_estimator(self.obs_history_buffer)
                         # 计算当前步的BCE损失
@@ -235,6 +243,8 @@ class TeacherPolicyRunner(OnPolicyRunner):
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
                     # Move to device
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
+                    contact_results = self.get_contact_detection()
+                    print(f"Contact detection: {contact_results}")
                     # perform normalization
                     obs = self.obs_normalizer(obs)
                     if self.privileged_obs_type is not None:
@@ -311,9 +321,6 @@ class TeacherPolicyRunner(OnPolicyRunner):
                     # 生成与训练时相同的虚拟碰撞标签（为了一致性，使用固定种子）
                     torch.manual_seed(step_idx + it * 1000)  # 确保每步的标签一致
                     dummy_true_collisions = (torch.rand(self.env.num_envs, 17, device=self.device) > 0.5).float()
-                    # 打印更新阶段的虚拟标签（只打印前3步）
-                    if step_idx < 3:
-                        print(f"Update - Step {step_idx}, Iter {it}: dummy_labels[0, :5] = {dummy_true_collisions[0, :5]}")
                     # 重新计算预测（带梯度）
                     collision_predictions_with_grad = self.collision_estimator(current_history)
                     

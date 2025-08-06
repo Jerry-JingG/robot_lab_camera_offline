@@ -95,7 +95,13 @@ class MySceneCfg(InteractiveSceneCfg):
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*", 
+        history_length=3, 
+        track_air_time=True,
+        debug_vis=False,
+        force_threshold=0.1,
+        )
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -526,6 +532,14 @@ class RewardsCfg:
         func=mdp.contact_forces,
         weight=0.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=""), "threshold": 100.0},
+    )
+    contact_detector = RewTerm(
+        func=mdp.contact_detection,
+        weight=0.0,  # 不用作奖励，只是检测
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*"),
+            "threshold": 0.1,
+        },
     )
 
     # Velocity-tracking rewards
