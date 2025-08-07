@@ -684,4 +684,4 @@ def contact_detection(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: Scen
     net_contact_forces = contact_sensor.data.net_forces_w_history
     is_contact = torch.max(torch.norm(net_contact_forces, dim=-1), dim=1)[0] > threshold
     
-    return is_contact
+    return is_contact.float()

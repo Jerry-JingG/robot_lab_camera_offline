@@ -208,9 +208,8 @@ class TeacherPolicyRunner(OnPolicyRunner):
         for it in range(start_iter, tot_iter):
             start = time.time()
             
-            # 初始化每个PPO迭代周期的碰撞损失累加器
-            collision_losses = []  # 存储每步的损失值
-            collision_step_count = 0
+            collision_training_data = []  # 存储碰撞训练数据
+            rollout_predictions_debug = []
             
             # Rollout
             with torch.inference_mode():
@@ -218,24 +217,14 @@ class TeacherPolicyRunner(OnPolicyRunner):
                     base_obs = self._extract_base_observations(obs)  # 保存原版，用于历史缓存
                     # 1. 更新历史观测缓存(原始观测)
                     self._update_history_buffer(base_obs)
+                    step_history = self.obs_history_buffer.detach().clone()
                     # 2. 生成碰撞预测
                     collision_predictions = self.collision_estimator(self.obs_history_buffer)
-                    
-                    # --- 在每个rollout步骤中计算并累积碰撞损失 ---
-                    # 暂时退出推理模式来计算损失（但不进行反向传播）
-                    with torch.enable_grad():
-                        # 准备"标准答案"：生成17维的0/1假数据，模拟真实碰撞标签
-                        dummy_true_collisions = (torch.rand(self.env.num_envs, 17, device=self.device) > 0.5).float()
-                        # 重新计算预测（需要梯度）
-                        collision_predictions_with_grad = self.collision_estimator(self.obs_history_buffer)
-                        # 计算当前步的BCE损失
-                        step_collision_loss = torch.nn.functional.binary_cross_entropy(
-                            collision_predictions_with_grad, dummy_true_collisions
-                        )
-                        # 存储损失值（不保持计算图）
-                        collision_losses.append(step_collision_loss.detach())
-                        collision_step_count += 1
-                    
+                    rollout_predictions_debug.append({
+                        'step': _,
+                        'history': step_history.clone(),  # 保存历史状态副本
+                        'prediction': collision_predictions.detach().clone()  # 保存预测副本
+                    })
                     enhanced_obs = self.get_enhanced_obs(obs, collision_predictions)
                     # Sample actions, PPO基于增强观测
                     actions = self.alg.act(enhanced_obs, privileged_obs)
@@ -243,8 +232,12 @@ class TeacherPolicyRunner(OnPolicyRunner):
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
                     # Move to device
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
-                    contact_results = self.get_contact_detection()
-                    print(f"Contact detection: {contact_results}")
+                    true_contact_labels = self.get_contact_detection()
+                    collision_training_data.append({
+                        'history': step_history,  # 第t步预测时使用的历史
+                        'labels': true_contact_labels.detach().clone(),  # 第t步的真实结果
+                        'step_idx': _  # 可选：用于调试
+                    })
                     # perform normalization
                     obs = self.obs_normalizer(obs)
                     if self.privileged_obs_type is not None:
@@ -291,7 +284,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
                 stop = time.time()
                 collection_time = stop - start
                 start = stop
-
+                
                 # compute returns
                 if self.training_type == "rl":
                     current_collision_predictions = self.collision_estimator(self.obs_history_buffer)
@@ -307,43 +300,41 @@ class TeacherPolicyRunner(OnPolicyRunner):
                     
             # update policy (PPO策略更新，这是原本的主要训练任务)
             loss_dict = self.alg.update()
-            
+
             # --- 碰撞估计器单独训练 ---
-            # 重新计算所有步骤的碰撞损失并进行反向传播
-            if collision_step_count > 0:
-                # 重新构建24步的累积损失（带梯度）
+            if len(collision_training_data) > 0:
                 accumulated_collision_loss = 0.0
                 
-                # 获取当前历史缓冲区状态
-                current_history = self.obs_history_buffer.clone()
-                
-                for step_idx in range(collision_step_count):
-                    # 生成与训练时相同的虚拟碰撞标签（为了一致性，使用固定种子）
-                    torch.manual_seed(step_idx + it * 1000)  # 确保每步的标签一致
-                    dummy_true_collisions = (torch.rand(self.env.num_envs, 17, device=self.device) > 0.5).float()
-                    # 重新计算预测（带梯度）
-                    collision_predictions_with_grad = self.collision_estimator(current_history)
+                for i, data in enumerate(collision_training_data):
+                    # 创建可训练张量
+                    step_history = data['history'].clone().detach()
+                    true_labels = data['labels'].clone().detach()
                     
-                    # 计算BCE损失
+                    # 基于第t步的历史状态预测（带梯度）
+                    collision_predictions_with_grad = self.collision_estimator(step_history)
+                    
+                    # if i < 5:
+                    #     rollout_prediction = rollout_predictions_debug[i]['prediction']
+                        
+                    #     print(f"\n=== 步骤 {i}: 17维预测对比 ===")
+                    #     print(f"Rollout预测[0]: {rollout_prediction[0]}")
+                    #     print(f"训练时预测[0]: {collision_predictions_with_grad[0].detach()}")
+                    
+                    # 计算第t步的损失
                     step_collision_loss = torch.nn.functional.binary_cross_entropy(
-                        collision_predictions_with_grad, dummy_true_collisions
+                        collision_predictions_with_grad, true_labels
                     )
                     
-                    # 累积损失
-                    accumulated_collision_loss = accumulated_collision_loss + step_collision_loss
+                    accumulated_collision_loss += step_collision_loss
                 
                 # 计算平均损失
-                mean_collision_loss = accumulated_collision_loss / collision_step_count
+                mean_collision_loss = accumulated_collision_loss / len(collision_training_data)
                 
-                # 单独优化碰撞估计器参数
+                # 优化器步骤
                 self.collision_optimizer.zero_grad()
-                # 对平均损失加权并反向传播
                 weighted_collision_loss = self.collision_loss_weight * mean_collision_loss
                 weighted_collision_loss.backward()
-                
-                # 梯度裁剪
                 nn.utils.clip_grad_norm_(self.collision_estimator.parameters(), max_norm=1.0)
-                
                 self.collision_optimizer.step()
                 
                 # 记录损失
