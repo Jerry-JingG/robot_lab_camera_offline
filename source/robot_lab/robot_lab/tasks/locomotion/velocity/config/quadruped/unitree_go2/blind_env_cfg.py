@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+import math
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedEnv
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
@@ -16,6 +18,7 @@ from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     MySceneCfg,
     ObservationsCfg,
     LocomotionVelocityRoughEnvCfg,
+    CommandsCfg
 )
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils, utils_cfg
 ##
@@ -26,7 +29,8 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils impo
 # use local assets
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains.config.terrain_cfg import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG, TRACK_TERRAIN_CFG
-
+import robot_lab.tasks.locomotion.velocity.mdp as mdp
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains import TrackTerrainImporterCfg
 
 def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.0) -> torch.Tensor:
     sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
@@ -42,7 +46,7 @@ def collision_predictions_placeholder(env: ManagerBasedEnv) -> torch.Tensor:
 @configclass
 class BlindSceneCfg(MySceneCfg):
     # 重写collision_scanner使用垂直网格模式
-    terrain = TerrainImporterCfg(
+    terrain = TrackTerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=TRACK_TERRAIN_CFG,
@@ -64,7 +68,7 @@ class BlindSceneCfg(MySceneCfg):
     collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
-        attach_yaw_only=True,
+        ray_alignment="base",
         pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
@@ -124,9 +128,34 @@ class BlindObsCfg(ObservationsCfg):
 
 
 @configclass
+class GoalCommandsCfg(CommandsCfg):
+    """Command specifications for the MDP."""
+
+    base_velocity = mdp.GoalVelocityCommandCfg(
+        asset_name="robot",
+        resampling_time_range=(10.0, 10.0),
+        rel_standing_envs=0.02,
+        rel_heading_envs=1.0,
+        heading_command=False,
+        heading_control_stiffness=0.5,
+        goal_position_command=True,
+        debug_vis=True,
+        ranges=mdp.GoalVelocityCommandCfg.Ranges(
+            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-2.0, 2.0), heading=(-math.pi, math.pi)
+        ),
+    )
+
+@configclass
+class CurriculumCfg:
+    """Curriculum terms for the MDP."""
+
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel_y)
+
+@configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
-    scene: BlindSceneCfg = BlindSceneCfg(num_envs=1, env_spacing=2.5)
+    scene: BlindSceneCfg = BlindSceneCfg(num_envs=4096, env_spacing=2.5)
     observations: BlindObsCfg = BlindObsCfg()
+    commands: GoalCommandsCfg = GoalCommandsCfg()
     base_link_name = "base"
     foot_link_name = ".*_foot"
     # fmt: off

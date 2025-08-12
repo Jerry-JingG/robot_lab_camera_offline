@@ -5,13 +5,15 @@ import isaaclab.terrains as terrain_gen
 from isaaclab.terrains import TerrainGeneratorCfg
 
 
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains.track_terrain_generator_cfg import TrackTerrainGeneratorCfg
 import robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains as track_terrain_gen
 
-TRACK_TERRAIN_CFG = TerrainGeneratorCfg(
-    size=(4.0, 16.0),
+
+TRACK_TERRAIN_CFG = TrackTerrainGeneratorCfg(
+    size=(4.0, 32.0),
     border_width=20.0,
     num_rows=10,
-    num_cols=20,
+    num_cols=21,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -19,12 +21,23 @@ TRACK_TERRAIN_CFG = TerrainGeneratorCfg(
     curriculum=False,
     difficulty_range=(0.0, 1.0),
     sub_terrains={
-        # 使用自定义的跑道地形
-        "track": track_terrain_gen.TrackTerrainCfg(
-            proportion=1.0,
+        # 使用自定义的跑道地形，三种地形等分
+        "track_overhang": track_terrain_gen.TrackTerrainOverhangCfg(
+            proportion=0.33,
             border_width=0.5,
             border_height=0.2,
         ),
+        "track_crack": track_terrain_gen.TrackTerrainCrackCfg(
+            proportion=0.33,
+            border_width=0.5,
+            border_height=0.2,
+        ),
+        "track_highland": track_terrain_gen.TrackTerrainHighlandCfg(
+            proportion=0.34,
+            border_width=0.5,
+            border_height=0.2,
+        ),
+
     },
 )
 """Track terrain configuration for racing from one end to another."""

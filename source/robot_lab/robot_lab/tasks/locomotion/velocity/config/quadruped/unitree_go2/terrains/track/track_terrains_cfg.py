@@ -13,10 +13,32 @@ Different trimesh terrain configurations.
 
 
 @configclass
-class TrackTerrainCfg(SubTerrainBaseCfg):
+class TrackTerrainOverhangCfg(SubTerrainBaseCfg):
     """Configuration for a track terrain."""
 
-    function = track_terrains.track_terrain
+    function = track_terrains.track_terrain_overhang
+
+    border_width: float = 0.0
+
+    border_height: float = 0.0
+
+
+@configclass
+class TrackTerrainCrackCfg(SubTerrainBaseCfg):
+    """Configuration for a track terrain."""
+
+    function = track_terrains.track_terrain_crack
+
+    border_width: float = 0.0
+
+    border_height: float = 0.0
+
+
+@configclass
+class TrackTerrainHighlandCfg(SubTerrainBaseCfg):
+    """Configuration for a track terrain with highland platforms."""
+
+    function = track_terrains.track_terrain_highland
 
     border_width: float = 0.0
 

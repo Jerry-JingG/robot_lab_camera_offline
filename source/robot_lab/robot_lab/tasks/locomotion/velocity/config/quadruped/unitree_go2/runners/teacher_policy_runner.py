@@ -113,7 +113,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
         """
         base_obs = obs_data[:, :-17]  # 去掉最后17维的占位符
         enhanced_obs = torch.cat([base_obs, predictions], dim=1)  # 拼接真实预测
-        print(f"增强观测维度: {enhanced_obs.shape}")
+        # print(f"增强观测维度: {enhanced_obs.shape}")
         return enhanced_obs
 
     def _extract_base_observations(self, obs):

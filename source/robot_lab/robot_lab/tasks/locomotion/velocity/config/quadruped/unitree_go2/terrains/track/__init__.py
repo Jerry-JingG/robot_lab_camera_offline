@@ -1,1 +1,1 @@
-from .track_terrains_cfg import TrackTerrainCfg
+from .track_terrains_cfg import TrackTerrainOverhangCfg, TrackTerrainCrackCfg, TrackTerrainHighlandCfg
