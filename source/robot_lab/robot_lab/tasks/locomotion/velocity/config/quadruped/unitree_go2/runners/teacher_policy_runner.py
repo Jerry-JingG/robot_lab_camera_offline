@@ -135,7 +135,133 @@ class TeacherPolicyRunner(OnPolicyRunner):
             threshold=0.1,
             sensor_cfg=SceneEntityCfg("contact_forces", body_names=".*")
         )
+        
+    def save(self, path: str, infos=None):
+        """保存 PPO 策略 + 优化器 + 归一化器 + 碰撞估计器"""
+        saved_dict = {
+            "model_state_dict": self.alg.policy.state_dict(),
+            "optimizer_state_dict": self.alg.optimizer.state_dict(),
+            "iter": self.current_learning_iteration,
+            "infos": infos,
+            "history_steps": self.history_steps,
+        }
+        # RND
+        if self.alg.rnd:
+            saved_dict["rnd_state_dict"] = self.alg.rnd.state_dict()
+            saved_dict["rnd_optimizer_state_dict"] = self.alg.rnd_optimizer.state_dict()
+        # 观测归一化
+        if self.empirical_normalization:
+            saved_dict["obs_norm_state_dict"] = self.obs_normalizer.state_dict()
+            saved_dict["privileged_obs_norm_state_dict"] = self.privileged_obs_normalizer.state_dict()
+        # 碰撞估计器
+        if hasattr(self, "collision_estimator") and self.collision_estimator is not None:
+            try:
+                saved_dict["collision_estimator_state_dict"] = self.collision_estimator.state_dict()
+            except Exception as e:
+                print(f"[WARN] save collision_estimator failed: {e}")
+        torch.save(saved_dict, path)
+
+        if getattr(self, "logger_type", None) in ["neptune", "wandb"] and not self.disable_logs:
+            self.writer.save_model(path, self.current_learning_iteration)
     
+    def load(self, path: str, load_optimizer: bool = True):
+        """加载并恢复碰撞估计器与归一化统计"""
+        loaded = torch.load(path, map_location=self.device, weights_only=False)
+        resumed_training = self.alg.policy.load_state_dict(loaded["model_state_dict"])
+
+        # RND
+        if self.alg.rnd and "rnd_state_dict" in loaded:
+            self.alg.rnd.load_state_dict(loaded["rnd_state_dict"])
+
+        # 归一化器
+        if self.empirical_normalization:
+            if resumed_training:
+                if "obs_norm_state_dict" in loaded:
+                    self.obs_normalizer.load_state_dict(loaded["obs_norm_state_dict"])
+                if "privileged_obs_norm_state_dict" in loaded:
+                    self.privileged_obs_normalizer.load_state_dict(loaded["privileged_obs_norm_state_dict"])
+            else:
+                # distillation 场景下的映射，这里保持与父类逻辑一致
+                if "obs_norm_state_dict" in loaded:
+                    self.privileged_obs_normalizer.load_state_dict(loaded["obs_norm_state_dict"])
+
+        # 优化器
+        if load_optimizer and resumed_training:
+            try:
+                self.alg.optimizer.load_state_dict(loaded["optimizer_state_dict"])
+            except Exception as e:
+                print(f"[WARN] optimizer load failed: {e}")
+            if self.alg.rnd and "rnd_optimizer_state_dict" in loaded:
+                try:
+                    self.alg.rnd_optimizer.load_state_dict(loaded["rnd_optimizer_state_dict"])
+                except Exception as e:
+                    print(f"[WARN] rnd optimizer load failed: {e}")
+
+        # 碰撞估计器
+        if hasattr(self, "collision_estimator") and "collision_estimator_state_dict" in loaded:
+            try:
+                self.collision_estimator.load_state_dict(loaded["collision_estimator_state_dict"])
+                self.collision_estimator.eval()
+                print("[INFO] collision_estimator weights loaded.")
+            except Exception as e:
+                print(f"[WARN] collision_estimator load failed: {e}")
+        else:
+            print("[INFO] collision_estimator weights missing in checkpoint; using current init.")
+
+        # 历史步数（若变动可重建）
+        ck_hist = loaded.get("history_steps", self.history_steps)
+        if ck_hist != self.history_steps:
+            print(f"[INFO] history_steps mismatch (ckpt {ck_hist} vs runner {self.history_steps}), re-init buffer.")
+            self.history_steps = ck_hist
+            self._init_history_buffer()
+
+        if resumed_training:
+            self.current_learning_iteration = loaded.get("iter", 0)
+        return loaded.get("infos", None)
+    
+    def get_inference_policy(self, device=None):
+        """
+        返回在推理阶段自动：
+        1. 去除占位末 17 维
+        2. 更新历史
+        3. 预测碰撞 17 维
+        4. 拼接增强观测
+        5. （若启用）做归一化
+        6. 前向策略
+        """
+        self.eval_mode()
+        if device is not None:
+            self.alg.policy.to(device)
+            if hasattr(self, "collision_estimator"):
+                self.collision_estimator.to(device)
+        # 关闭梯度
+        def _ensure_history(obs_tensor: torch.Tensor):
+            # 若 env 数目变化或形状不匹配，重建
+            if (not hasattr(self, "obs_history_buffer") or
+                self.obs_history_buffer.shape[0] != obs_tensor.shape[0] or
+                self.obs_history_buffer.shape[2] != obs_tensor.shape[1] - 17):
+                self._init_history_buffer()
+                # 初始用首帧填满
+                base = obs_tensor[:, :-17]
+                for _ in range(self.history_steps):
+                    self._update_history_buffer(base)
+
+        def policy_fn(full_obs: torch.Tensor):
+            with torch.inference_mode():
+                _ensure_history(full_obs)
+                base_obs = full_obs[:, :-17]
+                self._update_history_buffer(base_obs)
+                if hasattr(self, "collision_estimator") and self.collision_estimator is not None:
+                    collision_pred = self.collision_estimator(self.obs_history_buffer)
+                else:
+                    # 回退：用占位零
+                    collision_pred = torch.zeros((full_obs.shape[0], 17), device=full_obs.device)
+                enhanced = torch.cat([base_obs, collision_pred], dim=1)
+                if self.empirical_normalization:
+                    enhanced = self.obs_normalizer(enhanced)
+                return self.alg.policy.act_inference(enhanced)
+        return policy_fn
+
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         """
         Args:

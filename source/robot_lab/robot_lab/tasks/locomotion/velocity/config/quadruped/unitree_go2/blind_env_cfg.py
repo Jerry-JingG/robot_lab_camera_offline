@@ -125,7 +125,7 @@ class BlindObsCfg(ObservationsCfg):
 
 @configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
-    scene: BlindSceneCfg = BlindSceneCfg(num_envs=1, env_spacing=2.5)
+    scene: BlindSceneCfg = BlindSceneCfg(num_envs=2000, env_spacing=2.5)
     observations: BlindObsCfg = BlindObsCfg()
     base_link_name = "base"
     foot_link_name = ".*_foot"
