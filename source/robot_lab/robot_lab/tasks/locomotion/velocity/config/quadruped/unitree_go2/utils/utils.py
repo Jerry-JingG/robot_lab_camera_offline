@@ -4,6 +4,7 @@ import torch
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import omni.log
 import omni.physics.tensors.impl.api as physx
 from isaacsim.core.prims import XFormPrim
 
@@ -80,22 +81,7 @@ class RayCasterVertical(RayCaster):
         self._data = RayCasterVerticalData()
 
     def _initialize_rays_impl(self):
-        self.ray_starts, self.ray_directions = self.cfg.pattern_cfg.func(self.cfg.pattern_cfg, self._device)
-        self.num_rays = len(self.ray_directions)
-        # apply offset transformation to the rays
-        offset_pos = torch.tensor(list(self.cfg.offset.pos), device=self._device)
-        offset_quat = torch.tensor(list(self.cfg.offset.rot), device=self._device)
-        self.ray_directions = quat_apply(offset_quat.repeat(len(self.ray_directions), 1), self.ray_directions)
-        self.ray_starts += offset_pos
-        # repeat the rays for each sensor
-        self.ray_starts = self.ray_starts.repeat(self._view.count, 1, 1)
-        self.ray_directions = self.ray_directions.repeat(self._view.count, 1, 1)
-        # prepare drift
-        self.drift = torch.zeros(self._view.count, 3, device=self.device)
-        # fill the data buffer
-        self._data.pos_w = torch.zeros(self._view.count, 3, device=self._device)
-        self._data.quat_w = torch.zeros(self._view.count, 4, device=self._device)
-        self._data.ray_hits_w = torch.zeros(self._view.count, self.num_rays, 3, device=self._device)
+        super()._initialize_rays_impl()
         self._data.ray_starts_w = torch.zeros(self._view.count, self.num_rays, 3, device=self._device)
 
     def _update_buffers_impl(self, env_ids: Sequence[int]):
@@ -114,23 +100,52 @@ class RayCasterVertical(RayCaster):
         # note: we clone here because we are read-only operations
         pos_w = pos_w.clone()
         quat_w = quat_w.clone()
-        # apply drift
+        # apply drift to ray starting position in world frame
         pos_w += self.drift[env_ids]
         # store the poses
         self._data.pos_w[env_ids] = pos_w
         self._data.quat_w[env_ids] = quat_w
 
+        # check if user provided attach_yaw_only flag
+        if self.cfg.attach_yaw_only is not None:
+            msg = (
+                "Raycaster attribute 'attach_yaw_only' property will be deprecated in a future release."
+                " Please use the parameter 'ray_alignment' instead."
+            )
+            # set ray alignment to yaw
+            if self.cfg.attach_yaw_only:
+                self.cfg.ray_alignment = "yaw"
+                msg += " Setting ray_alignment to 'yaw'."
+            else:
+                self.cfg.ray_alignment = "base"
+                msg += " Setting ray_alignment to 'base'."
+            # log the warning
+            omni.log.warn(msg)
         # ray cast based on the sensor poses
-        if self.cfg.attach_yaw_only:
+        if self.cfg.ray_alignment == "world":
+            # apply horizontal drift to ray starting position in ray caster frame
+            pos_w[:, 0:2] += self.ray_cast_drift[env_ids, 0:2]
+            # no rotation is considered and directions are not rotated
+            ray_starts_w = self.ray_starts[env_ids]
+            ray_starts_w += pos_w.unsqueeze(1)
+            ray_directions_w = self.ray_directions[env_ids]
+        elif self.cfg.ray_alignment == "yaw":
+            # apply horizontal drift to ray starting position in ray caster frame
+            pos_w[:, 0:2] += quat_apply_yaw(quat_w, self.ray_cast_drift[env_ids])[:, 0:2]
             # only yaw orientation is considered and directions are not rotated
             ray_starts_w = quat_apply_yaw(quat_w.repeat(1, self.num_rays), self.ray_starts[env_ids])
             ray_starts_w += pos_w.unsqueeze(1)
-            ray_directions_w = quat_apply_yaw(quat_w.repeat(1, self.num_rays), self.ray_directions[env_ids])
-        else:
+            ray_directions_w = self.ray_directions[env_ids]
+        elif self.cfg.ray_alignment == "base":
+            # apply horizontal drift to ray starting position in ray caster frame
+            pos_w[:, 0:2] += quat_apply(quat_w, self.ray_cast_drift[env_ids])[:, 0:2]
             # full orientation is considered
             ray_starts_w = quat_apply(quat_w.repeat(1, self.num_rays), self.ray_starts[env_ids])
             ray_starts_w += pos_w.unsqueeze(1)
             ray_directions_w = quat_apply(quat_w.repeat(1, self.num_rays), self.ray_directions[env_ids])
+        else:
+            raise RuntimeError(f"Unsupported ray_alignment type: {self.cfg.ray_alignment}.")
+
         # ray cast and store the hits
         # TODO: Make this work for multiple meshes?
         self._data.ray_hits_w[env_ids] = raycast_mesh(
@@ -139,6 +154,9 @@ class RayCasterVertical(RayCaster):
             max_dist=self.cfg.max_distance,
             mesh=self.meshes[self.cfg.mesh_prim_paths[0]],
         )[0]
+
+        # apply vertical drift to ray starting position in ray caster frame
+        self._data.ray_hits_w[env_ids, :, 2] += self.ray_cast_drift[env_ids, 2].unsqueeze(-1)
         # store the ray starts in world coordinates
         self._data.ray_starts_w[env_ids] = ray_starts_w
 
