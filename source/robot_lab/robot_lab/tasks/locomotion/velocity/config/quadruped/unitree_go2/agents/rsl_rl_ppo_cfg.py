@@ -20,7 +20,7 @@ class UnitreeGo2BlindPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     
     # 确保这个标志为 True
     # train.py 脚本会检查这个标志来决定是否使用 TeacherPolicyRunner
-    use_teacher_policy: bool = True
+    use_teacher_policy: bool = False
     
     # 其他 runner 参数
     num_steps_per_env: int = 24
