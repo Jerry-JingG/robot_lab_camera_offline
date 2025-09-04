@@ -34,9 +34,12 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
         if self._use_goal_pos:
             # 这里假设使用世界系 (x, y, z) 目标点；若只用平面，可忽略 z。
             self.goal_pos_w = torch.zeros((self.num_envs, 3), device=self.device)
+            # 缓存从 _resample_command 采样的原始速度指令
+            self.sampled_vel_b = torch.zeros_like(self.vel_command_b)
         else:
             # 提供一个占位，避免属性不存在
             self.goal_pos_w = None
+            self.sampled_vel_b = None
         # 记录期望航向（用于 debug 红色箭头）
         self.desired_heading = torch.zeros(self.num_envs, device=self.device)
 
@@ -55,6 +58,11 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
         self.vel_command_b[env_ids, 1] = r.uniform_(*self.cfg.ranges.lin_vel_y)
         # -- ang vel yaw - rotation around z
         self.vel_command_b[env_ids, 2] = r.uniform_(*self.cfg.ranges.ang_vel_z)
+        
+        # 缓存原始采样速度，避免在 _update_command 中循环依赖导致数值衰减
+        if self._use_goal_pos:
+            self.sampled_vel_b[env_ids] = self.vel_command_b[env_ids]
+
         # heading target
         if self.cfg.heading_command:
             self.heading_target[env_ids] = r.uniform_(*self.cfg.ranges.heading)
@@ -111,9 +119,39 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
                 min=self.cfg.ranges.ang_vel_z[0],
                 max=self.cfg.ranges.ang_vel_z[1],
             )
+
+            # -- linear velocity: transform world-frame velocity to body-frame
+            # 1. desired velocity in world frame (direction towards goal, magnitude from sampled forward speed)
+            dir_w_desired = diff / (torch.norm(diff, dim=-1, keepdim=True) + 1e-6)
+            # Use the originally sampled forward speed as the desired speed to avoid feedback decay
+            speed = self.sampled_vel_b[env_ids, 0].unsqueeze(1)
+            vel_w_desired = dir_w_desired * speed
+
+            # 2. transform from world to body frame
+            # rotation matrix from world to body frame is the transpose of the body to world rotation matrix
+            # which is obtained from the robot's current heading
+            cos_h = torch.cos(-current_heading)
+            sin_h = torch.sin(-current_heading)
+            
+            # Construct the 2D rotation matrix
+            # Note: This is a batched rotation for all envs
+            rot_matrix_b_w = torch.stack([
+                torch.stack([cos_h, -sin_h], dim=-1),
+                torch.stack([sin_h, cos_h], dim=-1)
+            ], dim=1)
+
+            # Apply the rotation to the desired world velocity vector
+            # vel_w_desired is (N, 2), rot_matrix_b_w is (N, 2, 2)
+            # We need to reshape vel_w_desired to (N, 2, 1) for bmm
+            vel_b_desired = torch.bmm(rot_matrix_b_w, vel_w_desired.unsqueeze(-1)).squeeze(-1)
+
+            # 3. update the body-frame velocity command
+            self.vel_command_b[env_ids, :2] = vel_b_desired
+
         # Enforce standing
         standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
         self.vel_command_b[standing_env_ids, :] = 0.0
+        # print(self.vel_command_b)
  
     def _set_debug_vis_impl(self, debug_vis: bool):
         # set visibility of markers
@@ -131,7 +169,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
             # set their visibility to true
             self.goal_vel_visualizer.set_visibility(True)
             self.current_vel_visualizer.set_visibility(True)
-            self.expected_heading_visualizer.set_visibility(True)
+            self.expected_heading_visualizer.set_visibility(False)
             self.goal_pos_visualizer.set_visibility(True)
         else:
             if hasattr(self, "goal_vel_visualizer"):

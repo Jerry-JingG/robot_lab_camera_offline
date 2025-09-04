@@ -141,7 +141,7 @@ class GoalCommandsCfg(CommandsCfg):
         goal_position_command=True,
         debug_vis=True,
         ranges=mdp.GoalVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-2.0, 2.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(0.1, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-2.0, 2.0), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -156,6 +156,7 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
     scene: BlindSceneCfg = BlindSceneCfg(num_envs=4096, env_spacing=2.5)
     observations: BlindObsCfg = BlindObsCfg()
     commands: GoalCommandsCfg = GoalCommandsCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
     base_link_name = "base"
     foot_link_name = ".*_foot"
     # fmt: off

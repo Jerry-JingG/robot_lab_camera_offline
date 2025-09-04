@@ -135,7 +135,7 @@ def track_terrain_crack(
         crack_depth        = 0.8 + 0.9 * difficulty            # 0.8 ~ 1.7 (沿 y)
         crack_height       = 1.0                  
         gap_min_width      = 0.3
-        gap_base_width     = 0.5
+        gap_base_width     = 0.7
         gap_width          = max(gap_min_width, gap_base_width - 0.6 * difficulty)  # 0.5 ~ 0.3
         center_z           = crack_height / 2.0
         narrow_gap = make_narrow_crack(
