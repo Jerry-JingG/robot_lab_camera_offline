@@ -70,6 +70,8 @@ class BlindSceneCfg(MySceneCfg):
         mesh_prim_paths=["/World/ground"],
         max_distance=10.0,
     )
+    # Front-facing depth camera mounted on base
+    front_camera = utils_cfg.FrontCameraCfg()
 
 
 @configclass
@@ -92,6 +94,13 @@ class BlindObsCfg(ObservationsCfg):
             clip=(0.0, 1.0),  # 概率值限制在0-1之间
             scale=1.0,
         )
+        # Depth camera observation (flattened). If need 4-frame stack, stack externally in encoder.
+        front_cam_depth = ObsTerm(
+            func=utils.camera_depth_obs,
+            params={"sensor_cfg": SceneEntityCfg("front_camera"), "flatten": True, "normalize": True, "max_depth": 10.0},
+            clip=(0.0, 1.0),
+            scale=1.0,
+        )
         
         def __post_init__(self):
             # post init of parent
@@ -110,6 +119,12 @@ class BlindObsCfg(ObservationsCfg):
             func=collision_predictions_placeholder,
             params={},
             noise=None,
+            clip=(0.0, 1.0),
+            scale=1.0,
+        )
+        front_cam_depth = ObsTerm(
+            func=utils.camera_depth_obs,
+            params={"sensor_cfg": SceneEntityCfg("front_camera"), "flatten": True, "normalize": True, "max_depth": 10.0},
             clip=(0.0, 1.0),
             scale=1.0,
         )
@@ -147,6 +162,8 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.collision_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
         self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
         self.scene.height_scanner_base.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
+        # Align camera update rate with env step
+        self.scene.front_camera.update_period = self.decimation * self.sim.dt
 
         # ------------------------------Observations------------------------------
         self.observations.policy.base_lin_vel.scale = 2.0

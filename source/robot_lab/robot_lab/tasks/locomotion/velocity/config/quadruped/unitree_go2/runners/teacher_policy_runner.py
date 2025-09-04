@@ -45,9 +45,6 @@ class TeacherPolicyRunner(OnPolicyRunner):
         # 初始化历史观测缓存
         self._init_history_buffer()
         
-        # 初始化碰撞估计模型
-        self._init_collision_estimator()
-        
     def _init_history_buffer(self):
         """
         初始化历史观测缓存
@@ -63,28 +60,6 @@ class TeacherPolicyRunner(OnPolicyRunner):
             (self.env.num_envs, history_steps, base_obs_dim), 
             device=self.device
         )
-    
-    # 初始化 CollisionEstimator
-    def _init_collision_estimator(self):
-        """
-        初始化碰撞估计器
-        """
-        full_obs = self.env.get_observations()[0]
-        base_obs_dim = full_obs.shape[1] - 17
-        
-        # 使用基础观测维度初始化 CollisionEstimator
-        from ..modules.collision_estimator import CollisionEstimator
-        self.collision_estimator = CollisionEstimator(
-            input_dim=base_obs_dim,
-            history_steps=self.history_steps,
-            num_links=17,  # Go2机器人连杆数
-            hidden_dim=64
-        ).to(self.device)
-        
-        # 为碰撞估计器创建独立的优化器
-        self.collision_optimizer = torch.optim.Adam(self.collision_estimator.parameters(), lr=1e-3)
-        
-        print(f"碰撞估计器初始化完成，输入维度: {base_obs_dim}")
 
     def _update_history_buffer(self, current_obs: torch.Tensor):
         """
@@ -99,34 +74,9 @@ class TeacherPolicyRunner(OnPolicyRunner):
     
         # 将新观测添加到缓冲区末尾
         self.obs_history_buffer[:, -1, :] = current_obs
-        
-    def get_enhanced_obs(self, obs_data, predictions: torch.Tensor):
-        """
-        将真实的碰撞预测加入到观测中
-        
-        Args:
-            obs_data: 观测数据，可能是字典或张量
-            predictions: 碰撞估计器的17维输出
-            
-        Returns:
-            注入碰撞预测后的观测（保持原始类型）
-        """
-        base_obs = obs_data[:, :-17]  # 去掉最后17维的占位符
-        enhanced_obs = torch.cat([base_obs, predictions], dim=1)  # 拼接真实预测
-        # print(f"增强观测维度: {enhanced_obs.shape}")
-        return enhanced_obs
-
-    def _extract_base_observations(self, obs):
-        """
-        从完整观测中提取基础观测（用于历史缓存）
-        """
-        # 如果是张量，去掉最后17维（collision_predictions占位符）
-        base_obs = obs[:, :-17]
-        # print(f"基础观测维度: {base_obs.shape}")
-        return base_obs
     
     def get_contact_detection(self):
-        """直接调用检测函数"""
+        """调用真实碰撞标签检测函数"""
         from robot_lab.tasks.locomotion.velocity.mdp import rewards as mdp
         from isaaclab.managers import SceneEntityCfg
         actual_env = self.env.unwrapped  
@@ -135,132 +85,6 @@ class TeacherPolicyRunner(OnPolicyRunner):
             threshold=0.1,
             sensor_cfg=SceneEntityCfg("contact_forces", body_names=".*")
         )
-        
-    def save(self, path: str, infos=None):
-        """保存 PPO 策略 + 优化器 + 归一化器 + 碰撞估计器"""
-        saved_dict = {
-            "model_state_dict": self.alg.policy.state_dict(),
-            "optimizer_state_dict": self.alg.optimizer.state_dict(),
-            "iter": self.current_learning_iteration,
-            "infos": infos,
-            "history_steps": self.history_steps,
-        }
-        # RND
-        if self.alg.rnd:
-            saved_dict["rnd_state_dict"] = self.alg.rnd.state_dict()
-            saved_dict["rnd_optimizer_state_dict"] = self.alg.rnd_optimizer.state_dict()
-        # 观测归一化
-        if self.empirical_normalization:
-            saved_dict["obs_norm_state_dict"] = self.obs_normalizer.state_dict()
-            saved_dict["privileged_obs_norm_state_dict"] = self.privileged_obs_normalizer.state_dict()
-        # 碰撞估计器
-        if hasattr(self, "collision_estimator") and self.collision_estimator is not None:
-            try:
-                saved_dict["collision_estimator_state_dict"] = self.collision_estimator.state_dict()
-            except Exception as e:
-                print(f"[WARN] save collision_estimator failed: {e}")
-        torch.save(saved_dict, path)
-
-        if getattr(self, "logger_type", None) in ["neptune", "wandb"] and not self.disable_logs:
-            self.writer.save_model(path, self.current_learning_iteration)
-    
-    def load(self, path: str, load_optimizer: bool = True):
-        """加载并恢复碰撞估计器与归一化统计"""
-        loaded = torch.load(path, map_location=self.device, weights_only=False)
-        resumed_training = self.alg.policy.load_state_dict(loaded["model_state_dict"])
-
-        # RND
-        if self.alg.rnd and "rnd_state_dict" in loaded:
-            self.alg.rnd.load_state_dict(loaded["rnd_state_dict"])
-
-        # 归一化器
-        if self.empirical_normalization:
-            if resumed_training:
-                if "obs_norm_state_dict" in loaded:
-                    self.obs_normalizer.load_state_dict(loaded["obs_norm_state_dict"])
-                if "privileged_obs_norm_state_dict" in loaded:
-                    self.privileged_obs_normalizer.load_state_dict(loaded["privileged_obs_norm_state_dict"])
-            else:
-                # distillation 场景下的映射，这里保持与父类逻辑一致
-                if "obs_norm_state_dict" in loaded:
-                    self.privileged_obs_normalizer.load_state_dict(loaded["obs_norm_state_dict"])
-
-        # 优化器
-        if load_optimizer and resumed_training:
-            try:
-                self.alg.optimizer.load_state_dict(loaded["optimizer_state_dict"])
-            except Exception as e:
-                print(f"[WARN] optimizer load failed: {e}")
-            if self.alg.rnd and "rnd_optimizer_state_dict" in loaded:
-                try:
-                    self.alg.rnd_optimizer.load_state_dict(loaded["rnd_optimizer_state_dict"])
-                except Exception as e:
-                    print(f"[WARN] rnd optimizer load failed: {e}")
-
-        # 碰撞估计器
-        if hasattr(self, "collision_estimator") and "collision_estimator_state_dict" in loaded:
-            try:
-                self.collision_estimator.load_state_dict(loaded["collision_estimator_state_dict"])
-                self.collision_estimator.eval()
-                print("[INFO] collision_estimator weights loaded.")
-            except Exception as e:
-                print(f"[WARN] collision_estimator load failed: {e}")
-        else:
-            print("[INFO] collision_estimator weights missing in checkpoint; using current init.")
-
-        # 历史步数（若变动可重建）
-        ck_hist = loaded.get("history_steps", self.history_steps)
-        if ck_hist != self.history_steps:
-            print(f"[INFO] history_steps mismatch (ckpt {ck_hist} vs runner {self.history_steps}), re-init buffer.")
-            self.history_steps = ck_hist
-            self._init_history_buffer()
-
-        if resumed_training:
-            self.current_learning_iteration = loaded.get("iter", 0)
-        return loaded.get("infos", None)
-    
-    def get_inference_policy(self, device=None):
-        """
-        返回在推理阶段自动：
-        1. 去除占位末 17 维
-        2. 更新历史
-        3. 预测碰撞 17 维
-        4. 拼接增强观测
-        5. （若启用）做归一化
-        6. 前向策略
-        """
-        self.eval_mode()
-        if device is not None:
-            self.alg.policy.to(device)
-            if hasattr(self, "collision_estimator"):
-                self.collision_estimator.to(device)
-        # 关闭梯度
-        def _ensure_history(obs_tensor: torch.Tensor):
-            # 若 env 数目变化或形状不匹配，重建
-            if (not hasattr(self, "obs_history_buffer") or
-                self.obs_history_buffer.shape[0] != obs_tensor.shape[0] or
-                self.obs_history_buffer.shape[2] != obs_tensor.shape[1] - 17):
-                self._init_history_buffer()
-                # 初始用首帧填满
-                base = obs_tensor[:, :-17]
-                for _ in range(self.history_steps):
-                    self._update_history_buffer(base)
-
-        def policy_fn(full_obs: torch.Tensor):
-            with torch.inference_mode():
-                _ensure_history(full_obs)
-                base_obs = full_obs[:, :-17]
-                self._update_history_buffer(base_obs)
-                if hasattr(self, "collision_estimator") and self.collision_estimator is not None:
-                    collision_pred = self.collision_estimator(self.obs_history_buffer)
-                else:
-                    # 回退：用占位零
-                    collision_pred = torch.zeros((full_obs.shape[0], 17), device=full_obs.device)
-                enhanced = torch.cat([base_obs, collision_pred], dim=1)
-                if self.empirical_normalization:
-                    enhanced = self.obs_normalizer(enhanced)
-                return self.alg.policy.act_inference(enhanced)
-        return policy_fn
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         """
@@ -334,16 +158,9 @@ class TeacherPolicyRunner(OnPolicyRunner):
         for it in range(start_iter, tot_iter):
             start = time.time()
             
-            collision_training_data = []  # 存储碰撞训练数据
-            rollout_predictions_debug = []
-            
             # Rollout
             with torch.inference_mode():
                 for _ in range(self.num_steps_per_env):
-                    base_obs = self._extract_base_observations(obs)  # 保存原版，用于历史缓存
-                    # 1. 更新历史观测缓存(原始观测)
-                    self._update_history_buffer(base_obs)
-                    step_history = self.obs_history_buffer.detach().clone()
                     # 2. 生成碰撞预测
                     collision_predictions = self.collision_estimator(self.obs_history_buffer)
                     rollout_predictions_debug.append({

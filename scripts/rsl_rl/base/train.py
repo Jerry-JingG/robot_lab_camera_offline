@@ -13,6 +13,7 @@
 import argparse
 import os
 import sys
+from typing import Any
 
 from isaaclab.app import AppLauncher
 
@@ -70,6 +71,17 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
+
+# proprio & visual token encoder
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.proprio_tokenizer import (
+    ProprioTokenizer,
+)
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.visual_tokenizer import (
+    VisualTokenizer,
+)
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.token_fusion import (
+    fuse_tokens,
+)
 
 import robot_lab.tasks  # noqa: F401
 
@@ -138,19 +150,87 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # 
     # 获取 InteractiveScene    
-    scene = env.unwrapped.scene
-    # 正确遍历 art 实例
-    for name, art in scene.articulations.items():
-        # art 是 Articulation 对象，可以访问 body_names
-        body_names = art.body_names
-        print(f"\n=== articulation '{name}' body_names（共 {len(body_names)} 项） ===", file=sys.stderr)
-        for bn in body_names:
-            print(" -", bn, file=sys.stderr)
-        print("=== end ===\n", file=sys.stderr)
-        
-    obs=env.unwrapped.observation_manager
+    unwrapped: Any = getattr(env, "unwrapped", env)
+    scene = getattr(unwrapped, "scene", None)
+    if scene is not None:
+        # 正确遍历 art 实例
+        for name, art in scene.articulations.items():
+            # art 是 Articulation 对象，可以访问 body_names
+            body_names = art.body_names
+            print(f"\n=== articulation '{name}' body_names（共 {len(body_names)} 项） ===", file=sys.stderr)
+            for bn in body_names:
+                print(" -", bn, file=sys.stderr)
+            print("=== end ===\n", file=sys.stderr)
+
+    obs = getattr(unwrapped, "observation_manager", None)
     print("================observations===================")
     print(obs)
+
+    # Demo: extract policy terms [0..5] as proprio features and tokenize them.
+    # This does not affect training; it only prints the token shape once.
+    try:
+        # Compute the current policy observation (concatenated tensor if configured so)
+        if obs is None:
+            raise RuntimeError("unwrapped env does not expose observation_manager")
+        policy_obs = obs.compute_group("policy")  # Tensor[num_envs, D] or dict if not concatenated
+
+        # If not concatenated, flatten in the same order as term listing
+        if isinstance(policy_obs, dict):
+            # Flatten per-term along the last dim
+            ordered_terms = [policy_obs[name].reshape(policy_obs[name].shape[0], -1)
+                             for name in obs.active_terms["policy"]]
+            policy_obs = torch.cat(ordered_terms, dim=1)
+
+        assert isinstance(policy_obs, torch.Tensor), "Expected concatenated policy obs as Tensor"
+
+        # Build slice offsets from term shapes
+        term_shapes = obs.group_obs_term_dim["policy"]  # list[tuple[int, ...]]
+        def _numel(shape_tup: tuple[int, ...]) -> int:
+            n = 1
+            for s in shape_tup:
+                n *= int(s)
+            return n
+        term_lengths = [
+            _numel(shape_tup) for shape_tup in term_shapes
+        ]
+
+        # first six terms (indices 0..5): base_ang_vel, projected_gravity, velocity_commands,
+        # joint_pos, joint_vel, actions
+        k = 6
+        proprio_dim = sum(term_lengths[:k])
+        start_idx = 0
+        end_idx = proprio_dim
+
+        # Extract proprio slice for all envs
+        proprio_x = policy_obs[:, start_idx:end_idx]
+
+        # Tokenize
+        encoder = ProprioTokenizer(in_dim=proprio_dim, hidden_dims=(256, 256), token_dim=128, use_layernorm=True)
+        encoder = encoder.to(proprio_x.device)
+        with torch.no_grad():
+            t_prop = encoder(proprio_x)
+        print(f"[DEBUG] Proprio slice dims (first {k} terms): {proprio_dim}; token shape: {tuple(t_prop.shape)}")
+    except Exception as e:
+        print(f"[WARN] Proprio token demo failed: {e}")
+
+    # Demo: VisualTokenizer minimal check with dummy stacked depth
+    try:
+        vt = VisualTokenizer()
+        dummy_depth = torch.randn(1, 4, 64, 64)  # [B, 4, 64, 64]
+        with torch.no_grad():
+            vis_tokens = vt(dummy_depth)
+        print(f"[DEBUG] VisualTokenizer tokens shape: {tuple(vis_tokens.shape)}")  # expect (1, 16, 128)
+
+        # Optional: fuse with a dummy proprio token to verify the fusion util
+        try:
+            dummy_prop = torch.randn(1, vis_tokens.shape[-1])  # [B, D]
+            fused = fuse_tokens(dummy_prop, vis_tokens)
+            print(f"[DEBUG] Fused tokens shape: {tuple(fused.shape)}")  # expect (1, 17, 128)
+        except Exception as e:
+            print(f"[WARN] Token fusion util demo failed: {e}")
+    except Exception as e:
+        print(f"[WARN] VisualTokenizer demo failed: {e}")
+
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
@@ -225,6 +305,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 if __name__ == "__main__":
     # run the main function
-    main()
+    main()  # type: ignore[misc]
     # close sim app
     simulation_app.close()
