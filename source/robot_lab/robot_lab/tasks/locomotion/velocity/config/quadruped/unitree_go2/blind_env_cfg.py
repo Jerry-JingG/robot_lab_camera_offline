@@ -32,12 +32,29 @@ def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: flo
     sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
     return utils.calculate_euclidean_distance(sensor.data.ray_starts_w, sensor.data.ray_hits_w) - offset
 
-def collision_predictions_placeholder(env: ManagerBasedEnv) -> torch.Tensor:
+# NEW: dummy depth term (all zeros), flattened to [B, 4*64*64]
+def dummy_front_cam_depth(
+    env: ManagerBasedEnv,
+    channels: int = 4,
+    height: int = 64,
+    width: int = 64,
+    flatten: bool = True,
+    normalize: bool = True,
+) -> torch.Tensor:
     num_envs = env.num_envs
     device = env.device
-    # 返回17维的全0向量，代表"暂时没有碰撞预测信息"
-    # 这17维对应机器人的17个主要连杆/部位
-    return torch.zeros(num_envs, 17, dtype=torch.float32, device=device)
+    depth = torch.zeros(num_envs, channels, height, width, device=device, dtype=torch.float32)
+    # keep branch for API parity; zero tensor already in [0,1]
+    if flatten:
+        depth = depth.view(num_envs, -1)
+    return depth
+
+# def collision_predictions_placeholder(env: ManagerBasedEnv) -> torch.Tensor:
+#     num_envs = env.num_envs
+#     device = env.device
+#     # 返回17维的全0向量，代表"暂时没有碰撞预测信息"
+#     # 这17维对应机器人的17个主要连杆/部位
+#     return torch.zeros(num_envs, 17, dtype=torch.float32, device=device)
 
 @configclass
 class BlindSceneCfg(MySceneCfg):
@@ -86,24 +103,15 @@ class BlindObsCfg(ObservationsCfg):
             clip=(-1.0, 1.0),
             scale=1.0,
         )
-
-        collision_predictions = ObsTerm(
-            func=collision_predictions_placeholder,
-            params={},  # 不需要额外参数
-            noise=None,  # 碰撞预测不需要噪声
-            clip=(0.0, 1.0),  # 概率值限制在0-1之间
+        # NEW: add dummy depth to policy observations
+        front_cam_depth = ObsTerm(
+            func=dummy_front_cam_depth,
+            params={"channels": 4, "height": 64, "width": 64, "flatten": True, "normalize": True},
+            clip=(0.0, 1.0),
             scale=1.0,
         )
-        # Depth camera observation (flattened). If need 4-frame stack, stack externally in encoder.
-        # front_cam_depth = ObsTerm(
-        #     func=utils.camera_depth_obs,
-        #     params={"sensor_cfg": SceneEntityCfg("front_camera"), "flatten": True, "normalize": True, "max_depth": 10.0},
-        #     clip=(0.0, 1.0),
-        #     scale=1.0,
-        # )
-        
+
         def __post_init__(self):
-            # post init of parent
             super().__post_init__()
 
     @configclass
@@ -114,25 +122,17 @@ class BlindObsCfg(ObservationsCfg):
             clip=(-1.0, 1.0),
             scale=1.0,
         )
-
-        collision_predictions = ObsTerm(
-            func=collision_predictions_placeholder,
-            params={},
-            noise=None,
+        # NEW: add dummy depth to critic observations (keep parity with policy)
+        front_cam_depth = ObsTerm(
+            func=dummy_front_cam_depth,
+            params={"channels": 4, "height": 64, "width": 64, "flatten": True, "normalize": True},
             clip=(0.0, 1.0),
             scale=1.0,
         )
-        # front_cam_depth = ObsTerm(
-        #     func=utils.camera_depth_obs,
-        #     params={"sensor_cfg": SceneEntityCfg("front_camera"), "flatten": True, "normalize": True, "max_depth": 10.0},
-        #     clip=(0.0, 1.0),
-        #     scale=1.0,
-        # )
-        
+
         def __post_init__(self):
-            # post init of parent
             super().__post_init__()
-    
+
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     critic: CriticCfg = CriticCfg()
@@ -242,7 +242,7 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
         self.rewards.contact_forces.weight = -1.5e-4
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.contact_detector.weight = 0.0
+        # self.rewards.contact_detector.weight = 0.0
         
         # Velocity-tracking rewards
         self.rewards.track_lin_vel_xy_exp.weight = 3.0
