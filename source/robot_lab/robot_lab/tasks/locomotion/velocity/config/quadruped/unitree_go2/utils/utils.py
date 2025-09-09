@@ -90,8 +90,12 @@ class RayCasterVertical(RayCaster):
         # repeat the rays for each sensor
         self.ray_starts = self.ray_starts.repeat(self._view.count, 1, 1)
         self.ray_directions = self.ray_directions.repeat(self._view.count, 1, 1)
-        # prepare drift
-        self.drift = torch.zeros(self._view.count, 3, device=self.device)
+        # noise/drift buffers (support multiple isaaclab versions)
+        self.drift = torch.zeros(self._view.count, 3, device=self._device)
+        self.misalignment = torch.zeros(self._view.count, 3, device=self._device)
+        # aliases for older/newer api names
+        self.ray_cast_drift = self.drift
+        self.ray_cast_misalignment = self.misalignment
         # fill the data buffer
         self._data.pos_w = torch.zeros(self._view.count, 3, device=self._device)
         self._data.quat_w = torch.zeros(self._view.count, 4, device=self._device)
@@ -156,31 +160,31 @@ def calculate_euclidean_distance(point1: torch.Tensor, point2: torch.Tensor) -> 
     return torch.linalg.norm(point1 - point2, dim=-1)
 
 
-def camera_depth_obs(env, sensor_cfg, flatten: bool = True, normalize: bool = False, max_depth: float = 10.0) -> torch.Tensor:
-    """Fetch depth from a Camera sensor and optionally flatten/normalize.
+# def camera_depth_obs(env, sensor_cfg, flatten: bool = True, normalize: bool = False, max_depth: float = 10.0) -> torch.Tensor:
+#     """Fetch depth from a Camera sensor and optionally flatten/normalize.
 
-    Args:
-        env: ManagerBasedEnv instance (providing scene and num_envs).
-        sensor_cfg: SceneEntityCfg identifying the camera by name.
-        flatten: If True, reshape to [N, H*W]; otherwise keep [N, H, W].
-        normalize: If True, scale depth to [0,1] by max_depth.
-        max_depth: Maximum depth clip for normalization.
+#     Args:
+#         env: ManagerBasedEnv instance (providing scene and num_envs).
+#         sensor_cfg: SceneEntityCfg identifying the camera by name.
+#         flatten: If True, reshape to [N, H*W]; otherwise keep [N, H, W].
+#         normalize: If True, scale depth to [0,1] by max_depth.
+#         max_depth: Maximum depth clip for normalization.
 
-    Returns:
-        Depth tensor with shape [N, H*W] if flatten else [N, H, W].
-    """
-    cam = env.scene.sensors[sensor_cfg.name]
-    # Prefer distance_to_image_plane (a.k.a. depth)
-    if "distance_to_image_plane" in cam.data.output:
-        depth = cam.data.output["distance_to_image_plane"]  # [N, H, W, 1]
-    elif "depth" in cam.data.output:
-        depth = cam.data.output["depth"]
-    else:
-        raise RuntimeError("Camera does not provide depth output. Ensure data_types includes 'distance_to_image_plane' or 'depth'.")
+#     Returns:
+#         Depth tensor with shape [N, H*W] if flatten else [N, H, W].
+#     """
+#     cam = env.scene.sensors[sensor_cfg.name]
+#     # Prefer distance_to_image_plane (a.k.a. depth)
+#     if "distance_to_image_plane" in cam.data.output:
+#         depth = cam.data.output["distance_to_image_plane"]  # [N, H, W, 1]
+#     elif "depth" in cam.data.output:
+#         depth = cam.data.output["depth"]
+#     else:
+#         raise RuntimeError("Camera does not provide depth output. Ensure data_types includes 'distance_to_image_plane' or 'depth'.")
 
-    depth = depth.squeeze(-1)  # [N, H, W]
-    if normalize:
-        depth = depth.clamp(min=0.0, max=max_depth) / max_depth
-    if flatten:
-        depth = depth.reshape(env.num_envs, -1)
-    return depth
+#     depth = depth.squeeze(-1)  # [N, H, W]
+#     if normalize:
+#         depth = depth.clamp(min=0.0, max=max_depth) / max_depth
+#     if flatten:
+#         depth = depth.reshape(env.num_envs, -1)
+#     return depth
