@@ -110,7 +110,7 @@ ALL_TERRAINS_CFG = TerrainGeneratorCfg(
         "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
             proportion=0.2,
             ring_width_range=(0.3, 0.6),
-            ring_height_range=(0.1, 0.3),
+            ring_height_range=(0.2, 0.4),
             ring_thickness=0.1,
             platform_width=2.0,
         ),
