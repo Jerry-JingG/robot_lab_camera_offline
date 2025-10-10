@@ -12,8 +12,8 @@ import robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains
 TRACK_TERRAIN_CFG = TrackTerrainGeneratorCfg(
     size=(4.0, 32.0),
     border_width=20.0,
-    num_rows=10,
-    num_cols=21,
+    num_rows=1,
+    num_cols=1,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,

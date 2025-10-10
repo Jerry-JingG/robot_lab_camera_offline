@@ -153,7 +153,7 @@ class CurriculumCfg:
 
 @configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
-    scene: BlindSceneCfg = BlindSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: BlindSceneCfg = BlindSceneCfg(num_envs=1, env_spacing=2.5)
     observations: BlindObsCfg = BlindObsCfg()
     commands: GoalCommandsCfg = GoalCommandsCfg()
     curriculum: CurriculumCfg = CurriculumCfg()

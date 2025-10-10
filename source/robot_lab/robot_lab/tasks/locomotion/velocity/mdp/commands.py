@@ -169,7 +169,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
             # set their visibility to true
             self.goal_vel_visualizer.set_visibility(True)
             self.current_vel_visualizer.set_visibility(True)
-            self.expected_heading_visualizer.set_visibility(False)
+            self.expected_heading_visualizer.set_visibility(True)
             self.goal_pos_visualizer.set_visibility(True)
         else:
             if hasattr(self, "goal_vel_visualizer"):
