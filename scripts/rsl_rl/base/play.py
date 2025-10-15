@@ -69,18 +69,7 @@ from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 import robot_lab.tasks  # noqa: F401
 
-try:
-    from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.runners.teacher_policy_runner import (
-        TeacherPolicyRunner,
-    )
-    TEACHER_POLICY_AVAILABLE = True
-except ImportError:
-    TEACHER_POLICY_AVAILABLE = False
-    print(
-        "[WARNING] TeacherPolicyRunner not available. "
-        "Using default OnPolicyRunner."
-    )
-    
+
 def main():
     """Play with RSL-RL agent."""
     # parse configuration
@@ -155,104 +144,54 @@ def main():
 
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-    
-    use_teacher_policy = (
-        TEACHER_POLICY_AVAILABLE
-        and "Unitree-Go2-v0" in args_cli.task
-        and hasattr(agent_cfg, "use_teacher_policy")
-        and agent_cfg.use_teacher_policy
-    )
 
-    if use_teacher_policy:
-        print("[INFO] Using TeacherPolicyRunner for play.")
-        runner = TeacherPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    else:
-        print("[INFO] Using OnPolicyRunner for play.")
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    
-    runner.load(resume_path)
-    policy = runner.get_inference_policy(device=env.unwrapped.device)
+    print(f"[INFO]: Loading model checkpoint from: {resume_path}")
+    # load previously trained model
+    ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    ppo_runner.load(resume_path)
+
+    # obtain the trained policy for inference
+    policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
+
+    # extract the neural network module
+    # we do this in a try-except to maintain backwards compatibility.
     try:
-        policy_nn = runner.alg.policy
+        # version 2.3 onwards
+        policy_nn = ppo_runner.alg.policy
     except AttributeError:
-        policy_nn = runner.alg.actor_critic
-    
-    # # load previously trained model
-    # ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    # ppo_runner.load(resume_path)
-
-    # # obtain the trained policy for inference
-    # policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
-
-    # # extract the neural network module
-    # # we do this in a try-except to maintain backwards compatibility.
-    # try:
-    #     # version 2.3 onwards
-    #     policy_nn = ppo_runner.alg.policy
-    # except AttributeError:
-    #     # version 2.2 and below
-    #     policy_nn = ppo_runner.alg.actor_critic
+        # version 2.2 and below
+        policy_nn = ppo_runner.alg.actor_critic
 
     # export policy to onnx/jit
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    os.makedirs(export_model_dir, exist_ok=True)
-
-    # 统一获取 normalizer（TeacherPolicyRunner / OnPolicyRunner 都有）
-    normalizer = getattr(runner, "obs_normalizer", None)
-
-    try:
-        export_policy_as_onnx(
-            policy=policy_nn,
-            normalizer=normalizer,
-            path=export_model_dir,
-            filename="policy.onnx",
-        )
-        export_policy_as_jit(
-            policy=policy_nn,
-            normalizer=normalizer,
-            path=export_model_dir,
-            filename="policy.pt",
-        )
-        print(f"[INFO] Exported policy to: {export_model_dir}")
-    except Exception as e:
-        print(f"[WARN] Export failed: {e}")
+    export_policy_as_onnx(
+        policy=policy_nn,
+        normalizer=ppo_runner.obs_normalizer,
+        path=export_model_dir,
+        filename="policy.onnx",
+    )
+    export_policy_as_jit(
+        policy=policy_nn,
+        normalizer=ppo_runner.obs_normalizer,
+        path=export_model_dir,
+        filename="policy.pt",
+    )
 
     dt = env.unwrapped.step_dt
 
     # reset environment
     obs, _ = env.get_observations()
     timestep = 0
-    
-    if use_teacher_policy and hasattr(runner, "history_steps"):
-        base0 = obs[:, :-17]
-        # 重新初始化并填充
-        runner._init_history_buffer()
-        for _ in range(runner.history_steps):
-            runner._update_history_buffer(base0)
-    
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
+        # run everything in inference mode
         with torch.inference_mode():
-            # policy 已封装: 内部会截取 base_obs -> 更新 history -> 预测 collision -> 拼接 -> 归一化 -> act
+            # agent stepping
             actions = policy(obs)
-
-            # 环境步进
+            # actions = torch.zeros_like(actions)
+            # env stepping
             obs, _, _, _ = env.step(actions)
-
-            # 调试前 5 步
-            if timestep < 5:
-                print(f"[DBG] step={timestep} obs_mean={obs.mean():.3f} obs_std={obs.std():.3f}")
-                if use_teacher_policy:
-                    # 当前缓冲里最新一帧已在 policy 调用中更新
-                    try:
-                        collision_pred_dbg = runner.collision_estimator(runner.obs_history_buffer)
-                        print("[DBG] collision_pred[0][:8]:", collision_pred_dbg[0, :8].detach().cpu().numpy())
-                        print("[DBG] last17 placeholder raw obs (环境输出):", obs[0, -17:].detach().cpu().numpy())
-                    except Exception as e:
-                        print(f"[DBG] collision pred debug failed: {e}")
-                print(f"[DBG] act_mean={actions.mean():.3f} act_std={actions.std():.3f}")
-        
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
