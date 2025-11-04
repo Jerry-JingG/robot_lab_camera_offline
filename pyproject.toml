@@ -61,6 +61,17 @@ known_local_folder = "config"
 
 [tool.pyright]
 
+venvPath = "/home/henryliuoz/anaconda3/envs"
+venv = "isaac4.5"
+extraPaths = [
+    "source/robot_lab",
+    "../IsaacLab/source/isaaclab",
+    "../IsaacLab/source/isaaclab_assets",
+    "../IsaacLab/source/isaaclab_mimic",
+    "../IsaacLab/source/isaaclab_rl",
+    "../IsaacLab/source/isaaclab_tasks"
+]
+
 exclude = [
     "**/__pycache__",
     "**/docs",

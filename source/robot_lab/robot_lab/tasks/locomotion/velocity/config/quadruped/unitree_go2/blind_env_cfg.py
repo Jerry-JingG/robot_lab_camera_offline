@@ -32,12 +32,14 @@ def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: flo
     sensor: utils.RayCasterVertical = env.scene.sensors[sensor_cfg.name]
     return utils.calculate_euclidean_distance(sensor.data.ray_starts_w, sensor.data.ray_hits_w) - offset
 
+
 def collision_predictions_placeholder(env: ManagerBasedEnv) -> torch.Tensor:
     num_envs = env.num_envs
     device = env.device
     # 返回17维的全0向量，代表"暂时没有碰撞预测信息"
     # 这17维对应机器人的17个主要连杆/部位
     return torch.zeros(num_envs, 17, dtype=torch.float32, device=device)
+
 
 @configclass
 class BlindSceneCfg(MySceneCfg):
@@ -64,8 +66,8 @@ class BlindSceneCfg(MySceneCfg):
     collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
-        attach_yaw_only=True,
-        pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
+        ray_alignment="yaw",
+        pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=(0.4, 0.5), direction=(1.0, 0.0, 0.0)),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
         max_distance=10.0,
@@ -101,7 +103,7 @@ class BlindObsCfg(ObservationsCfg):
         #     clip=(0.0, 1.0),
         #     scale=1.0,
         # )
-        
+
         def __post_init__(self):
             # post init of parent
             super().__post_init__()
@@ -128,11 +130,11 @@ class BlindObsCfg(ObservationsCfg):
         #     clip=(0.0, 1.0),
         #     scale=1.0,
         # )
-        
+
         def __post_init__(self):
             # post init of parent
             super().__post_init__()
-    
+
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     critic: CriticCfg = CriticCfg()
@@ -243,7 +245,7 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.contact_forces.weight = -1.5e-4
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.contact_detector.weight = 0.0
-        
+
         # Velocity-tracking rewards
         self.rewards.track_lin_vel_xy_exp.weight = 3.0
         self.rewards.track_ang_vel_z_exp.weight = 1.5

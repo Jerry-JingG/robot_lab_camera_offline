@@ -15,6 +15,7 @@ from rsl_rl.env import VecEnv
 from rsl_rl.algorithms import PPO
 from rsl_rl.utils import store_code_state
 
+
 class TeacherPolicyRunner(OnPolicyRunner):
     def __init__(self,
                  env: VecEnv,
@@ -34,17 +35,17 @@ class TeacherPolicyRunner(OnPolicyRunner):
             collision_loss_weight: 碰撞估计损失权重
         """
         super().__init__(env, train_cfg, log_dir, device, **kwargs)
-        
+
         print("=================================================")
         print("TeacherPolicyRunner.__init__ IS CALLED!")
         print("=================================================")
-        
+
         self.history_steps = history_steps
         self.collision_loss_weight = collision_loss_weight
-    
+
         # 初始化历史观测缓存
         self._init_history_buffer()
-        
+
     def _init_history_buffer(self):
         """
         初始化历史观测缓存
@@ -54,7 +55,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
         base_obs_dim = full_obs.shape[1] - 17
         print(f"历史缓存维度: {base_obs_dim}")
         history_steps = self.history_steps
-    
+
         # 创建历史缓冲区：(num_envs, history_steps, base_obs_dim)
         self.obs_history_buffer = torch.zeros(
             (self.env.num_envs, history_steps, base_obs_dim), 
@@ -64,17 +65,17 @@ class TeacherPolicyRunner(OnPolicyRunner):
     def _update_history_buffer(self, current_obs: torch.Tensor):
         """
         更新历史观测缓存
-        
+
         Args:
             current_obs: 当前观测 (num_envs, obs_dim)
         """
         # 将缓冲区向左移动一位（移除最旧的观测）
         # 使用 .clone() 来避免源和目标内存重叠的 RuntimeError
         self.obs_history_buffer[:, :-1, :] = self.obs_history_buffer[:, 1:, :].clone()
-    
+
         # 将新观测添加到缓冲区末尾
         self.obs_history_buffer[:, -1, :] = current_obs
-    
+
     def get_contact_detection(self):
         """调用真实碰撞标签检测函数"""
         from robot_lab.tasks.locomotion.velocity.mdp import rewards as mdp
@@ -157,7 +158,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
         tot_iter = start_iter + num_learning_iterations
         for it in range(start_iter, tot_iter):
             start = time.time()
-            
+
             # Rollout
             with torch.inference_mode():
                 for _ in range(self.num_steps_per_env):
@@ -189,9 +190,9 @@ class TeacherPolicyRunner(OnPolicyRunner):
                         )
                     else:
                         privileged_obs = obs
-                    
+
                     self.alg.process_env_step(rewards, dones, infos)
-                
+
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg.rnd else None
 
@@ -227,7 +228,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
                 stop = time.time()
                 collection_time = stop - start
                 start = stop
-                
+
                 # compute returns
                 if self.training_type == "rl":
                     current_collision_predictions = self.collision_estimator(self.obs_history_buffer)
@@ -240,39 +241,39 @@ class TeacherPolicyRunner(OnPolicyRunner):
                             obs, current_collision_predictions
                         )
                     self.alg.compute_returns(enhanced_privileged_obs)
-                    
+
             # update policy (PPO策略更新，这是原本的主要训练任务)
             loss_dict = self.alg.update()
 
             # --- 碰撞估计器单独训练 ---
             if len(collision_training_data) > 0:
                 accumulated_collision_loss = 0.0
-                
+
                 for i, data in enumerate(collision_training_data):
                     # 创建可训练张量
                     step_history = data['history'].clone().detach()
                     true_labels = data['labels'].clone().detach()
-                    
+
                     # 基于第t步的历史状态预测（带梯度）
                     collision_predictions_with_grad = self.collision_estimator(step_history)
-                    
+
                     # if i < 5:
                     #     rollout_prediction = rollout_predictions_debug[i]['prediction']
-                        
+
                     #     print(f"\n=== 步骤 {i}: 17维预测对比 ===")
                     #     print(f"Rollout预测[0]: {rollout_prediction[0]}")
                     #     print(f"训练时预测[0]: {collision_predictions_with_grad[0].detach()}")
-                    
+
                     # 计算第t步的损失
                     step_collision_loss = torch.nn.functional.binary_cross_entropy(
                         collision_predictions_with_grad, true_labels
                     )
-                    
+
                     accumulated_collision_loss += step_collision_loss
-                
+
                 # 计算平均损失
                 mean_collision_loss = accumulated_collision_loss / len(collision_training_data)
-                
+
                 # 优化器步骤
                 self.collision_optimizer.zero_grad()
                 weighted_collision_loss = self.collision_loss_weight * mean_collision_loss
@@ -313,4 +314,3 @@ class TeacherPolicyRunner(OnPolicyRunner):
         # Save the final model after training
         if self.log_dir is not None and not self.disable_logs:
             self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
-    

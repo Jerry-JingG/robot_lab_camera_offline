@@ -35,7 +35,6 @@ import robot_lab.tasks.locomotion.velocity.mdp as mdp
 ##
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils_cfg
-    
 
 ##
 # Scene definition
@@ -73,7 +72,7 @@ class MySceneCfg(InteractiveSceneCfg):
     # collision_scanner = utils_cfg.RayCasterVerticalCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",
     #     offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
-    #     attach_yaw_only=True,
+    #     ray_alignment="yaw",
     #     pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
     #     debug_vis=True,
     #     mesh_prim_paths=["/World/ground"],
@@ -82,7 +81,7 @@ class MySceneCfg(InteractiveSceneCfg):
     height_scanner = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
+        ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
@@ -90,18 +89,18 @@ class MySceneCfg(InteractiveSceneCfg):
     height_scanner_base = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
+        ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.05, size=(0.1, 0.1)),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
     contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*", 
-        history_length=3, 
+        prim_path="{ENV_REGEX_NS}/Robot/.*",
+        history_length=3,
         track_air_time=True,
         debug_vis=False,
         force_threshold=0.1,
-        )
+    )
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",

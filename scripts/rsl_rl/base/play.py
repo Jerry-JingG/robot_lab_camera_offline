@@ -80,7 +80,8 @@ except ImportError:
         "[WARNING] TeacherPolicyRunner not available. "
         "Using default OnPolicyRunner."
     )
-    
+
+
 def main():
     """Play with RSL-RL agent."""
     # parse configuration
@@ -155,7 +156,7 @@ def main():
 
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-    
+
     use_teacher_policy = (
         TEACHER_POLICY_AVAILABLE
         and "Unitree-Go2-v0" in args_cli.task
@@ -169,14 +170,14 @@ def main():
     else:
         print("[INFO] Using OnPolicyRunner for play.")
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    
+
     runner.load(resume_path)
     policy = runner.get_inference_policy(device=env.unwrapped.device)
     try:
         policy_nn = runner.alg.policy
     except AttributeError:
         policy_nn = runner.alg.actor_critic
-    
+
     # # load previously trained model
     # ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     # ppo_runner.load(resume_path)
@@ -222,14 +223,14 @@ def main():
     # reset environment
     obs, _ = env.get_observations()
     timestep = 0
-    
+
     if use_teacher_policy and hasattr(runner, "history_steps"):
         base0 = obs[:, :-17]
         # 重新初始化并填充
         runner._init_history_buffer()
         for _ in range(runner.history_steps):
             runner._update_history_buffer(base0)
-    
+
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
@@ -252,7 +253,7 @@ def main():
                     except Exception as e:
                         print(f"[DBG] collision pred debug failed: {e}")
                 print(f"[DBG] act_mean={actions.mean():.3f} act_std={actions.std():.3f}")
-        
+
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
