@@ -20,7 +20,7 @@ class UnitreeGo2BlindPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     
     # 确保这个标志为 True
     # train和play脚本会检查这个标志来决定是否使用 MemoryPolicyRunner
-    use_memory_policy: bool = False
+    use_memory_policy: bool = True
     
     # 其他 runner 参数
     num_steps_per_env: int = 24

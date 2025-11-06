@@ -14,7 +14,6 @@ from rsl_rl.runners import OnPolicyRunner
 from rsl_rl.env import VecEnv
 from rsl_rl.algorithms import PPO
 from rsl_rl.utils import store_code_state
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.txl_actor_critic import TXLActorCritic
 
 class MemoryPolicyRunner(OnPolicyRunner):
     def __init__(self,
@@ -37,42 +36,7 @@ class MemoryPolicyRunner(OnPolicyRunner):
         print("=================================================")
         print("MemoryPolicyRunner.__init__ IS CALLED!")
         print("=================================================")
-        # Swap default MLP policy with TXLActorCritic (tokenizers + TXL memory)
-        # Infer actor/critic obs dims from a fresh observation sample
-        with torch.inference_mode():
-            obs0, extras0 = self.env.get_observations()
-        obs0 = obs0.to(self.device)
-        actor_dim = obs0.shape[1]
-        if isinstance(extras0, dict) and "observations" in extras0 and self.privileged_obs_type is not None:
-            critic_obs0 = extras0["observations"].get(self.privileged_obs_type, obs0)
-            critic_dim = critic_obs0.shape[1]
-        else:
-            critic_dim = actor_dim
-
-        # Build TXLActorCritic with explicit proprio dims and vision enabled.
-        # Notes:
-        # - Our TXLActorCritic slices proprio as the first 45 dims in policy obs,
-        #   and for critic obs it skips the first 3 dims then takes 45 dims.
-        # - Depth is assumed to be the last 4x64x64 block in both groups.
-        txl_policy = TXLActorCritic(
-            num_actor_obs=actor_dim,
-            num_critic_obs=critic_dim,
-            num_actions=self.env.num_actions,
-            proprio_dim=45,
-            critic_proprio_dim=45,
-            use_critic_vision=True,
-            depth_shape=(4, 64, 64),
-            critic_depth_shape=(4, 64, 64),
-        ).to(self.device)
-        # Ensure distillation guard won't error if enabled in cfg
-        if not hasattr(txl_policy, "loaded_teacher"):
-            setattr(txl_policy, "loaded_teacher", False)
-
-        # Replace in algorithm and rebuild optimizer to use new parameters
-        self.alg.policy = txl_policy  # type: ignore[attr-defined]
-        # keep same learning rate from PPO instance
-        self.alg.optimizer = torch.optim.Adam(self.alg.policy.parameters(), lr=self.alg.learning_rate)  # type: ignore[attr-defined]
-        # self.collision_loss_weight = collision_loss_weight
+        # Use the default policy from OnPolicyRunner without any custom modules.
     
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         """
@@ -103,8 +67,8 @@ class MemoryPolicyRunner(OnPolicyRunner):
             else:
                 raise ValueError("Logger type not found. Please choose 'neptune', 'wandb' or 'tensorboard'.")
 
-        # check if teacher is loaded
-        if self.training_type == "distillation" and not self.alg.policy.loaded_teacher:
+        # check if teacher is loaded (guard for distillation without custom policy)
+        if self.training_type == "distillation" and not getattr(self.alg.policy, "loaded_teacher", False):
             raise ValueError("Teacher model parameters not loaded. Please load a teacher model to distill.")
 
         # randomize initial episode lengths (for exploration)
