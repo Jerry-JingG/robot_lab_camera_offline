@@ -73,15 +73,15 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 # proprio & visual token encoder
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.proprio_tokenizer import (
-    ProprioTokenizer,
-)
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.visual_tokenizer import (
-    VisualTokenizer,
-)
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.token_fusion import (
-    fuse_tokens,
-)
+# from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.proprio_tokenizer import (
+#     ProprioTokenizer,
+# )
+# from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.visual_tokenizer import (
+#     VisualTokenizer,
+# )
+# from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.token_fusion import (
+#     fuse_tokens,
+# )
 
 import robot_lab.tasks  # noqa: F401
 
