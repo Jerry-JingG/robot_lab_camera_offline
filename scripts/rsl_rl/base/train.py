@@ -85,16 +85,16 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.to
 
 import robot_lab.tasks  # noqa: F401
 
-# Import TeacherPolicyRunner for teacher policy training
+# Import MemoryPolicyRunner for memory policy training
 try:
-    from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.runners.teacher_policy_runner import (
-        TeacherPolicyRunner,
+    from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.runners.memory_policy_runner import (
+        MemoryPolicyRunner,
     )
-    TEACHER_POLICY_AVAILABLE = True
+    MEMORY_POLICY_AVAILABLE = True
 except ImportError:
-    TEACHER_POLICY_AVAILABLE = False
+    MEMORY_POLICY_AVAILABLE = False
     print(
-        "[WARNING] TeacherPolicyRunner not available. "
+        "[WARNING] MemoryPolicyRunner not available. "
         "Using default OnPolicyRunner."
     )
 
@@ -255,20 +255,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     # create runner from rsl-rl
-    # Check if we should use TeacherPolicyRunner based on task name
-    use_teacher_policy = (
-        TEACHER_POLICY_AVAILABLE
+    # Check if we should use MemoryPolicyRunner based on task name
+    use_memory_policy = (
+        MEMORY_POLICY_AVAILABLE
         and "Unitree-Go2-v0" in args_cli.task
-        and hasattr(agent_cfg, "use_teacher_policy")
-        and agent_cfg.use_teacher_policy
+        and hasattr(agent_cfg, "use_memory_policy")
+        and agent_cfg.use_memory_policy
     )
 
-    if use_teacher_policy:
+    if use_memory_policy:
         print(
-            "[INFO] Using TeacherPolicyRunner for teacher policy "
+            "[INFO] Using MemoryPolicyRunner for memory policy "
             "training."
         )
-        runner = TeacherPolicyRunner(
+        runner = MemoryPolicyRunner(
             env,
             agent_cfg.to_dict(),
             log_dir=log_dir,

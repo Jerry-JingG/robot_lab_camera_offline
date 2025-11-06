@@ -16,7 +16,7 @@ from rsl_rl.algorithms import PPO
 from rsl_rl.utils import store_code_state
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.modules.txl_actor_critic import TXLActorCritic
 
-class TeacherPolicyRunner(OnPolicyRunner):
+class MemoryPolicyRunner(OnPolicyRunner):
     def __init__(self,
                  env: VecEnv,
                  train_cfg: Dict[str, Any],
@@ -35,7 +35,7 @@ class TeacherPolicyRunner(OnPolicyRunner):
         super().__init__(env, train_cfg, log_dir, device, **kwargs)
         
         print("=================================================")
-        print("TeacherPolicyRunner.__init__ IS CALLED!")
+        print("MemoryPolicyRunner.__init__ IS CALLED!")
         print("=================================================")
         # Swap default MLP policy with TXLActorCritic (tokenizers + TXL memory)
         # Infer actor/critic obs dims from a fresh observation sample
