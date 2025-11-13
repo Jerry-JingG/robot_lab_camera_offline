@@ -1,5 +1,7 @@
 # XuanHeng Modifications
 
+commit1:
+
 Fixed the warnings in isaacsim app:
 
 in blind_env_cfg and velocity_env_cfg, change attach_yaw_only to ray_alignment="yaw", it says attach_yaw_only will be deprated
@@ -13,3 +15,7 @@ in train.py, comment out blockes of code which seems for debug. Add parser train
 IDE：
 in pyproject.toml, add env paths under tool.pyright
 其余的修改是我嫌IDE报的那些格式警告太丑了
+
+commit2:
+直接从郭靖43dfe32分支复制了velocity文件夹到本地。我看郭靖加了一个terrains文件夹，别的还加了什么我不知道，害怕出bug就全拉过来了。
+尝试改了一下commands

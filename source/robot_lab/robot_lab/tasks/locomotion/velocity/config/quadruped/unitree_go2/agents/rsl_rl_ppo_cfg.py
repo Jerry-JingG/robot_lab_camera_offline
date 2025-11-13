@@ -13,21 +13,21 @@ from isaaclab_rl.rsl_rl import (
 class UnitreeGo2BlindPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # # 指定要使用的 Policy 类的完整 Python 路径
     # policy_class_name: str = "robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.agents.teacher_policy.TeacherPolicy"
-
+    
     # 设置一个明确的实验名称，方便区分
     experiment_name: str = "unitree_go2_blind_teacher"
     run_name: str = "first_teacher_run"
-
+    
     # 确保这个标志为 True
     # train.py 脚本会检查这个标志来决定是否使用 TeacherPolicyRunner
-    use_teacher_policy: bool = False
-
+    use_teacher_policy: bool = True
+    
     # 其他 runner 参数
     num_steps_per_env: int = 24
     max_iterations: int = 20000
     save_interval: int = 100
     empirical_normalization: bool = False
-
+    
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],

@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+import math
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedEnv
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
@@ -16,6 +18,7 @@ from robot_lab.tasks.locomotion.velocity.velocity_env_cfg import (
     MySceneCfg,
     ObservationsCfg,
     LocomotionVelocityRoughEnvCfg,
+    CommandsCfg
 )
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils, utils_cfg
 ##
@@ -25,7 +28,9 @@ from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils impo
 # from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 # use local assets
 from robot_lab.assets.unitree import UNITREE_GO2_CFG  # isort: skip
-from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrain import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains.config.terrain_cfg import POST_DISASTER_TERRAINS_CFG, ALL_TERRAINS_CFG, TRACK_TERRAIN_CFG
+import robot_lab.tasks.locomotion.velocity.mdp as mdp
+from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains import TrackTerrainImporterCfg
 
 
 def collision_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float = 0.0) -> torch.Tensor:
@@ -44,10 +49,10 @@ def collision_predictions_placeholder(env: ManagerBasedEnv) -> torch.Tensor:
 @configclass
 class BlindSceneCfg(MySceneCfg):
     # 重写collision_scanner使用垂直网格模式
-    terrain = TerrainImporterCfg(
+    terrain = TrackTerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=ALL_TERRAINS_CFG,
+        terrain_generator=TRACK_TERRAIN_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -66,14 +71,12 @@ class BlindSceneCfg(MySceneCfg):
     collision_scanner = utils_cfg.RayCasterVerticalCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
-        ray_alignment="yaw",
-        pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=(0.4, 0.5), direction=(1.0, 0.0, 0.0)),
+        ray_alignment="base",
+        pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
         max_distance=10.0,
     )
-    # Front-facing depth camera mounted on base
-    # front_camera = utils_cfg.FrontCameraCfg()
 
 
 @configclass
@@ -96,13 +99,6 @@ class BlindObsCfg(ObservationsCfg):
             clip=(0.0, 1.0),  # 概率值限制在0-1之间
             scale=1.0,
         )
-        # Depth camera observation (flattened). If need 4-frame stack, stack externally in encoder.
-        # front_cam_depth = ObsTerm(
-        #     func=utils.camera_depth_obs,
-        #     params={"sensor_cfg": SceneEntityCfg("front_camera"), "flatten": True, "normalize": True, "max_depth": 10.0},
-        #     clip=(0.0, 1.0),
-        #     scale=1.0,
-        # )
 
         def __post_init__(self):
             # post init of parent
@@ -124,12 +120,6 @@ class BlindObsCfg(ObservationsCfg):
             clip=(0.0, 1.0),
             scale=1.0,
         )
-        # front_cam_depth = ObsTerm(
-        #     func=utils.camera_depth_obs,
-        #     params={"sensor_cfg": SceneEntityCfg("front_camera"), "flatten": True, "normalize": True, "max_depth": 10.0},
-        #     clip=(0.0, 1.0),
-        #     scale=1.0,
-        # )
 
         def __post_init__(self):
             # post init of parent
@@ -141,9 +131,37 @@ class BlindObsCfg(ObservationsCfg):
 
 
 @configclass
+class GoalCommandsCfg(CommandsCfg):
+    """Command specifications for the MDP."""
+
+    base_velocity = mdp.GoalVelocityCommandCfg(
+        asset_name="robot",
+        resampling_time_range=(10.0, 10.0),
+        rel_standing_envs=0.02,
+        rel_heading_envs=1.0,
+        heading_command=False,
+        heading_control_stiffness=0.5,
+        goal_position_command=True,
+        debug_vis=True,
+        ranges=mdp.GoalVelocityCommandCfg.Ranges(
+            lin_vel_x=(0.1, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-2.0, 2.0), heading=(-math.pi, math.pi)
+        ),
+    )
+
+
+@configclass
+class CurriculumCfg:
+    """Curriculum terms for the MDP."""
+
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel_y)
+
+
+@configclass
 class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
     scene: BlindSceneCfg = BlindSceneCfg(num_envs=4096, env_spacing=2.5)
     observations: BlindObsCfg = BlindObsCfg()
+    commands: GoalCommandsCfg = GoalCommandsCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
     base_link_name = "base"
     foot_link_name = ".*_foot"
     # fmt: off
@@ -164,8 +182,6 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.scene.collision_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
         self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
         self.scene.height_scanner_base.prim_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
-        # Align camera update rate with env step
-        # self.scene.front_camera.update_period = self.decimation * self.sim.dt
 
         # ------------------------------Observations------------------------------
         self.observations.policy.base_lin_vel.scale = 2.0
@@ -173,7 +189,7 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.observations.policy.joint_pos.scale = 1.0
         self.observations.policy.joint_vel.scale = 0.05
         self.observations.policy.base_lin_vel = None
-        # self.observations.policy.height_scan = None
+        self.observations.policy.height_scan = None
         self.observations.policy.joint_pos.params["asset_cfg"].joint_names = self.joint_names
         self.observations.policy.joint_vel.params["asset_cfg"].joint_names = self.joint_names
 
@@ -244,7 +260,6 @@ class UnitreeGo2BlindEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.undesired_contacts.params["sensor_cfg"].body_names = [f"^(?!.*{self.foot_link_name}).*"]
         self.rewards.contact_forces.weight = -1.5e-4
         self.rewards.contact_forces.params["sensor_cfg"].body_names = [self.foot_link_name]
-        self.rewards.contact_detector.weight = 0.0
 
         # Velocity-tracking rewards
         self.rewards.track_lin_vel_xy_exp.weight = 3.0

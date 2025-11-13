@@ -35,6 +35,7 @@ import robot_lab.tasks.locomotion.velocity.mdp as mdp
 ##
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.utils import utils_cfg
+    
 
 ##
 # Scene definition
@@ -72,7 +73,7 @@ class MySceneCfg(InteractiveSceneCfg):
     # collision_scanner = utils_cfg.RayCasterVerticalCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base",
     #     offset=utils_cfg.RayCasterCfg.OffsetCfg(pos=(-0.45, 0.0, 0.0)),
-    #     ray_alignment="yaw",
+    #     attach_yaw_only=True,
     #     pattern_cfg=utils_cfg.GridPatternVerticalCfg(resolution=0.1, size=[0.4, 0.5], direction=(1.0, 0.0, 0.0)),
     #     debug_vis=True,
     #     mesh_prim_paths=["/World/ground"],
@@ -94,13 +95,7 @@ class MySceneCfg(InteractiveSceneCfg):
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
-    contact_forces = ContactSensorCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/.*",
-        history_length=3,
-        track_air_time=True,
-        debug_vis=False,
-        force_threshold=0.1,
-    )
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -531,14 +526,6 @@ class RewardsCfg:
         func=mdp.contact_forces,
         weight=0.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=""), "threshold": 100.0},
-    )
-    contact_detector = RewTerm(
-        func=mdp.contact_detection,
-        weight=0.0,  # 不用作奖励，只是检测
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*"),
-            "threshold": 0.1,
-        },
     )
 
     # Velocity-tracking rewards
