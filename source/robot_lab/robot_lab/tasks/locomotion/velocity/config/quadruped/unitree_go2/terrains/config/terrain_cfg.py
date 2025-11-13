@@ -12,8 +12,8 @@ import robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.terrains
 TRACK_TERRAIN_CFG = TrackTerrainGeneratorCfg(
     size=(4.0, 32.0),
     border_width=20.0,
-    num_rows=1,
-    num_cols=1,
+    num_rows=10,
+    num_cols=21,
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -22,18 +22,18 @@ TRACK_TERRAIN_CFG = TrackTerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     sub_terrains={
         # 使用自定义的跑道地形，三种地形等分
-        "track_overhang": track_terrain_gen.TrackTerrainOverhangCfg(
-            proportion=0.33,
-            border_width=0.5,
-            border_height=0.2,
-        ),
-        "track_crack": track_terrain_gen.TrackTerrainCrackCfg(
-            proportion=0.33,
-            border_width=0.5,
-            border_height=0.2,
-        ),
+        # "track_overhang": track_terrain_gen.TrackTerrainOverhangCfg(
+        #     proportion=0.33,
+        #     border_width=0.5,
+        #     border_height=0.2,
+        # ),
+        # "track_crack": track_terrain_gen.TrackTerrainCrackCfg(
+        #     proportion=0.33,
+        #     border_width=0.5,
+        #     border_height=0.2,
+        # ),
         "track_highland": track_terrain_gen.TrackTerrainHighlandCfg(
-            proportion=0.34,
+            proportion=1.0,
             border_width=0.5,
             border_height=0.2,
         ),
