@@ -533,14 +533,14 @@ class RewardsCfg:
         weight=0.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=""), "threshold": 100.0},
     )
-    contact_detector = RewTerm(
-        func=mdp.contact_detection,
-        weight=0.0,  # 不用作奖励，只是检测
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*"),
-            "threshold": 0.1,
-        },
-    )
+    # contact_detector = RewTerm(
+    #     func=mdp.contact_detection,
+    #     weight=0.0,  # 不用作奖励，只是检测
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*"),
+    #         "threshold": 0.1,
+    #     },
+    # )
 
     # Velocity-tracking rewards
     track_lin_vel_xy_exp = RewTerm(

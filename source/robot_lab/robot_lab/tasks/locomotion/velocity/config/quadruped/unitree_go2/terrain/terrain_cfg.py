@@ -110,7 +110,7 @@ ALL_TERRAINS_CFG = TerrainGeneratorCfg(
         "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
             proportion=0.2,
             ring_width_range=(0.3, 0.6),
-            ring_height_range=(0.1, 0.3),
+            ring_height_range=(0.2, 0.4),
             ring_thickness=0.1,
             platform_width=2.0,
         ),
@@ -168,14 +168,14 @@ ALL_TERRAINS_CFG = TerrainGeneratorCfg(
             num_waves=2,
         ),
         # "hf_stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-        #     proportion=0.25,
+        #     proportion=0.05,
         #     stone_height_max=0.2,
         #     stone_width_range=(0.3, 0.6),
         #     stone_distance_range=(0.2, 0.5),
         #     holes_depth=-10.0,
         #     platform_width=2.0,
         # ),
-        # Repeated objects terrains
+        # # Repeated objects terrains
         # "repeated_pyramids": terrain_gen.MeshRepeatedPyramidsTerrainCfg(
         #     proportion=0.05,
         #     object_params_start=terrain_gen.MeshRepeatedPyramidsTerrainCfg.ObjectCfg(

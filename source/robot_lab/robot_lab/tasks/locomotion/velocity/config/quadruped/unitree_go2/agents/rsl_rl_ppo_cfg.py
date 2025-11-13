@@ -12,15 +12,15 @@ from isaaclab_rl.rsl_rl import (
 @configclass
 class UnitreeGo2BlindPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # # 指定要使用的 Policy 类的完整 Python 路径
-    # policy_class_name: str = "robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.agents.teacher_policy.TeacherPolicy"
+    # policy_class_name: str = "robot_lab.tasks.locomotion.velocity.config.quadruped.unitree_go2.agents.memory_policy.MemoryPolicy"
     
     # 设置一个明确的实验名称，方便区分
-    experiment_name: str = "unitree_go2_blind_teacher"
-    run_name: str = "first_teacher_run"
+    experiment_name: str = "unitree_go2_blind_memory"
+    run_name: str = "first_memory_run"
     
     # 确保这个标志为 True
-    # train.py 脚本会检查这个标志来决定是否使用 TeacherPolicyRunner
-    use_teacher_policy: bool = False
+    # train和play脚本会检查这个标志来决定是否使用 MemoryPolicyRunner
+    use_memory_policy: bool = True
     
     # 其他 runner 参数
     num_steps_per_env: int = 24
@@ -57,7 +57,7 @@ class UnitreeGo2RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 100
     experiment_name = "unitree_go2_rough"
     empirical_normalization = False
-    use_teacher_policy = False  # Set to True to use TeacherPolicyRunner
+    use_memory_policy = False  # Set to True to use MemoryPolicyRunner
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
