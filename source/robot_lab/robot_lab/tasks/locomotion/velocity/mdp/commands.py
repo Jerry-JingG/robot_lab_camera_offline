@@ -44,7 +44,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
         self.desired_heading = torch.zeros(self.num_envs, device=self.device)
 
     def _resample_command(self, env_ids: Sequence[int]):
-        # 原有的指令重采样逻辑 ...
+         # 原有的指令重采样逻辑 ...
         terrain = self._env.scene.terrain  # TerrainImporter
 
         # 1. 获取所有环境的张量（长度 = num_envs）
@@ -58,7 +58,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
         self.vel_command_b[env_ids, 1] = r.uniform_(*self.cfg.ranges.lin_vel_y)
         # -- ang vel yaw - rotation around z
         self.vel_command_b[env_ids, 2] = r.uniform_(*self.cfg.ranges.ang_vel_z)
-
+        
         # 缓存原始采样速度，避免在 _update_command 中循环依赖导致数值衰减
         if self._use_goal_pos:
             self.sampled_vel_b[env_ids] = self.vel_command_b[env_ids]
@@ -132,7 +132,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
             # which is obtained from the robot's current heading
             cos_h = torch.cos(-current_heading)
             sin_h = torch.sin(-current_heading)
-
+            
             # Construct the 2D rotation matrix
             # Note: This is a batched rotation for all envs
             rot_matrix_b_w = torch.stack([
@@ -152,7 +152,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
         standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
         self.vel_command_b[standing_env_ids, :] = 0.0
         # print(self.vel_command_b)
-
+ 
     def _set_debug_vis_impl(self, debug_vis: bool):
         # set visibility of markers
         # note: parent only deals with callbacks. not their visibility
@@ -169,7 +169,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
             # set their visibility to true
             self.goal_vel_visualizer.set_visibility(True)
             self.current_vel_visualizer.set_visibility(True)
-            self.expected_heading_visualizer.set_visibility(False)
+            self.expected_heading_visualizer.set_visibility(True)
             self.goal_pos_visualizer.set_visibility(True)
         else:
             if hasattr(self, "goal_vel_visualizer"):
@@ -230,8 +230,7 @@ class GoalVelocityCommand(mdp.UniformVelocityCommand):
         # 直接构造世界系绕 Z 的四元数 (roll=0,pitch=0,yaw=heading)，不再乘 base 姿态
         arrow_quat = math_utils.quat_from_euler_xyz(zeros, zeros, heading_angle)
         return arrow_scale, arrow_quat
-
-
+        
 @configclass
 class GoalVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
     """Configuration for the goal velocity command generator."""
@@ -261,39 +260,6 @@ class GoalVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
     goal_vel_visualizer_cfg.markers["arrow"].scale = (0.5, 0.5, 0.5)
     current_vel_visualizer_cfg.markers["arrow"].scale = (0.5, 0.5, 0.5)
     expected_heading_visualizer_cfg.markers["arrow"].scale = (0.5, 0.5, 0.5)
-
-
-class ForwardHeadingVelocityCommand(mdp.UniformVelocityCommand):
-    """heading_target is not randomly sampled now, it points towards the direction of the speed coommand"""
-
-    cfg: mdp.ForwardHeadingVelocityCommandCfg
-    """The configuration of the command generator."""
-
-    def _resample_command(self, env_ids: Sequence[int]):
-        # mostly same with super._resample_command
-        r = torch.empty(len(env_ids), device=self.device)
-        self.vel_command_b[env_ids, 0] = r.uniform_(*self.cfg.ranges.lin_vel_x)
-        self.vel_command_b[env_ids, 1] = r.uniform_(*self.cfg.ranges.lin_vel_y)
-        self.vel_command_b[env_ids, 2] = r.uniform_(*self.cfg.ranges.ang_vel_z)
-        if self.cfg.heading_command:
-
-            # the only thing differs here
-            vx = self.vel_command_b[env_ids, 0]
-            vy = self.vel_command_b[env_ids, 1]
-            self.heading_target[env_ids] = torch.atan2(vy, vx)
-
-            self.is_heading_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_heading_envs
-        self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
-
-        # set small commands to zero
-        self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
-
-
-@configclass
-class ForwardHeadingVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
-    """Configuration for a heading velocity command generator."""
-
-    class_type: type = ForwardHeadingVelocityCommand
 
 
 class UniformThresholdVelocityCommand(mdp.UniformVelocityCommand):
