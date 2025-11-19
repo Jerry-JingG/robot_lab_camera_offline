@@ -22,18 +22,18 @@ TRACK_TERRAIN_CFG = TrackTerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     sub_terrains={
         # 使用自定义的跑道地形，三种地形等分
-        "track_overhang": track_terrain_gen.TrackTerrainOverhangCfg(
-            proportion=0.33,
-            border_width=0.5,
-            border_height=0.2,
-        ),
-        "track_crack": track_terrain_gen.TrackTerrainCrackCfg(
-            proportion=0.33,
-            border_width=0.5,
-            border_height=0.2,
-        ),
+        # "track_overhang": track_terrain_gen.TrackTerrainOverhangCfg(
+        #     proportion=0.33,
+        #     border_width=0.5,
+        #     border_height=0.2,
+        # ),
+        # "track_crack": track_terrain_gen.TrackTerrainCrackCfg(
+        #     proportion=0.33,
+        #     border_width=0.5,
+        #     border_height=0.2,
+        # ),
         "track_highland": track_terrain_gen.TrackTerrainHighlandCfg(
-            proportion=0.34,
+            proportion=1.0,
             border_width=0.5,
             border_height=0.2,
         ),

@@ -19,3 +19,6 @@ in pyproject.toml, add env paths under tool.pyright
 commit2:
 直接从郭靖43dfe32分支复制了velocity文件夹到本地。我看郭靖加了一个terrains文件夹，别的还加了什么我不知道，害怕出bug就全拉过来了。
 尝试改了一下commands
+
+commit3:
+直接和 8f8dede4567ef1c691c0763d80d787c49d3c599a JingG分支合并
